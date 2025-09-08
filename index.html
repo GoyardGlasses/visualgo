@@ -2,94 +2,85 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Style Graph Visualizer</title>
+  <title>Cyberpunk Graph Visualizer</title>
   <style>
-    /* ===== Instagram-inspired Style ===== */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    /* ===== Cyberpunk Minimal Brutalism Style ===== */
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&display=swap');
 
     body {
       display: flex;
       margin: 0;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Orbitron', 'Inter', sans-serif;
       height: 100vh;
-      background: #fafafa;
-      color: #262626;
+      background: #0d0d0d;
+      color: #fff;
     }
 
     #sidebar {
-      width: 320px;
-      background: #fff;
-      padding: 20px;
+      width: 300px;
+      background: #111;
+      color: #0ff;
+      padding: 15px;
       display: flex;
       flex-direction: column;
-      border-right: 1px solid #dbdbdb;
-      box-shadow: 2px 0 5px rgba(0,0,0,0.05);
-      border-radius: 0 10px 10px 0;
+      border-right: 2px solid #0ff;
     }
 
     h2 {
-      margin: 0 0 15px 0;
+      margin: 0 0 10px 0;
       font-weight: 700;
-      font-size: 20px;
-      color: #405de6; /* Instagram gradient blue/purple */
-      letter-spacing: 0.5px;
+      font-size: 22px;
+      color: #f0f;
+      letter-spacing: 1px;
     }
 
     label {
-      margin-top: 12px;
+      margin-top: 10px;
       font-size: 14px;
       font-weight: 600;
-      color: #262626;
     }
 
     button, select, input[type=range] {
       margin: 8px 0;
-      padding: 10px;
-      border: none;
-      border-radius: 12px;
+      padding: 8px;
+      border: 2px solid #0ff;
+      border-radius: 4px;
       width: 100%;
       font-size: 14px;
-      background: linear-gradient(135deg, #f58529, #dd2a7b, #8134af, #515bd4);
-      color: #fff;
-      font-weight: 600;
+      background: #111;
+      color: #0ff;
+      font-weight: 700;
       cursor: pointer;
       transition: all 0.2s ease;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
 
     button:hover, select:hover, input[type=range]:hover {
-      opacity: 0.9;
-    }
-
-    select, input[type=range] {
-      background: #fafafa;
-      border: 1px solid #dbdbdb;
-      color: #262626;
-      font-weight: 500;
+      border-color: #f0f;
+      color: #f0f;
     }
 
     #explanation {
       flex: 1;
       overflow-y: auto;
-      background: #f0f0f0;
-      padding: 10px;
-      border-radius: 12px;
+      background: #111;
+      padding: 8px;
+      border-radius: 6px;
       margin-top: 12px;
       font-size: 13px;
-      border: 1px solid #dbdbdb;
-      color: #262626;
+      border: 1px solid #0ff;
+      color: #0ff;
     }
 
     #canvas {
       flex: 1;
-      background: #fff;
+      background: #0d0d0d;
       cursor: crosshair;
     }
   </style>
 </head>
 <body>
   <div id="sidebar">
-    <h2> Graph Visualizer</h2>
+    <h2>Cyberpunk Graph Visualizer</h2>
 
     <label>Mode:</label>
     <select id="mode">
@@ -136,7 +127,7 @@
   <script>
     const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d");
-    canvas.width = window.innerWidth - 320;
+    canvas.width = window.innerWidth - 300;
     canvas.height = window.innerHeight;
 
     const NODE_RADIUS = 20;
@@ -151,7 +142,7 @@
     function drawGraph(highlights = {}) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.lineWidth = 2;
-      ctx.font = "14px Inter";
+      ctx.font = "14px Orbitron, Inter";
 
       // Draw edges
       for (let u in edges) {
@@ -159,13 +150,17 @@
           const [x1, y1] = nodes[u];
           const [x2, y2] = nodes[v];
 
-          ctx.strokeStyle = (highlights.edge && highlights.edge[`${u}-${v}`]) || "#c13584"; // Instagram pink
+          ctx.strokeStyle = (highlights.edge && highlights.edge[`${u}-${v}`]) || "#0ff";
+          ctx.shadowColor = "#0ff";
+          ctx.shadowBlur = 12;
+
           ctx.beginPath();
           ctx.moveTo(x1, y1);
           ctx.lineTo(x2, y2);
           ctx.stroke();
 
-          ctx.fillStyle = "#262626";
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = "#f0f";
           ctx.fillText(w, (x1 + x2) / 2, (y1 + y2) / 2);
         }
       }
@@ -174,18 +169,25 @@
       for (let n in nodes) {
         const [x, y] = nodes[n];
 
-        ctx.fillStyle = (highlights.node && highlights.node[n]) || "#f58529"; // Instagram gradient orange
+        ctx.fillStyle = (highlights.node && highlights.node[n]) || "#ff0";
+        ctx.shadowColor = "#ff0";
+        ctx.shadowBlur = 20;
+
         ctx.beginPath();
         ctx.arc(x, y, NODE_RADIUS, 0, 2 * Math.PI);
         ctx.fill();
 
-        ctx.strokeStyle = "#fff";
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = "#0ff";
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        ctx.fillStyle = "#262626";
+        ctx.fillStyle = "#0ff";
         ctx.fillText(n, x - 5, y + 5);
       }
+
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = "transparent";
     }
 
     canvas.addEventListener("click", e => {
@@ -235,10 +237,154 @@
       }
     }
 
-    // Dijkstra & Kruskal logic remains same as your previous script
-    // For brevity, you can copy the generator functions & helper functions from previous examples
+    // Dijkstra & Kruskal
+    function* dijkstraSteps(start, end) {
+      let dist = {}, prev = {}, heap = [];
+      for (let n in nodes) { dist[n] = Infinity; prev[n] = null; }
+      dist[start] = 0;
+      heap.push([0, start]);
+      log("Initialized distances.");
+
+      while (heap.length) {
+        heap.sort((a,b)=>a[0]-b[0]);
+        let [d, u] = heap.shift();
+        log(`POP: ${u} with dist ${d}`);
+        if (u === end) break;
+        for (let { v, w } of edges[u]) {
+          log(`Consider edge ${u} → ${v} (w=${w})`);
+          if (d+w < dist[v]) {
+            dist[v] = d+w;
+            prev[v] = u;
+            heap.push([dist[v], v]);
+            log(`Relax: Update ${v} to dist ${dist[v]}`);
+          }
+        }
+        yield drawGraph({ node: { [u]: "orange" } });
+      }
+      log("Dijkstra finished.");
+
+      let node = end;
+      while (prev[node]) {
+        const p = prev[node];
+        yield drawGraph({
+          node: { [node]: "lime", [p]: "lime" },
+          edge: { [`${p}-${node}`]: "lime", [`${node}-${p}`]: "lime" }
+        });
+        node = p;
+      }
+    }
+
+    function* kruskalSteps() {
+      let allEdges = [];
+      for (let u in edges) {
+        for (let { v, w } of edges[u]) {
+          if (u < v) allEdges.push({ u, v, w });
+        }
+      }
+      allEdges.sort((a,b)=>a.w-b.w);
+      let parent = {}, rank = {};
+      for (let n in nodes) { parent[n]=n; rank[n]=0; }
+
+      function find(x){ if(parent[x]!==x) parent[x]=find(parent[x]); return parent[x]; }
+      function unite(x,y){ x=find(x); y=find(y); if(x!==y){ if(rank[x]<rank[y]) [x,y]=[y,x]; parent[y]=x; if(rank[x]===rank[y]) rank[x]++; return true;} return false; }
+
+      for (let e of allEdges) {
+        log(`Considering edge ${e.u}-${e.v} (w=${e.w})`);
+        if (unite(e.u, e.v)) {
+          log(`Accepted edge ${e.u}-${e.v}`);
+          yield drawGraph({ edge: { [`${e.u}-${e.v}`]: "lime", [`${e.v}-${e.u}`]: "lime" } });
+        } else {
+          log(`Rejected edge ${e.u}-${e.v} (cycle)`);
+          yield drawGraph({ edge: { [`${e.u}-${e.v}`]: "red", [`${e.v}-${e.u}`]: "red" } });
+        }
+      }
+      log("Kruskal finished.");
+    }
+
+    function setupRun() {
+      const algo = document.getElementById("algorithm").value;
+      if (algo === "dijkstra") {
+        const start = document.getElementById("startNode").value;
+        const end = document.getElementById("endNode").value;
+        if (!start || !end) return;
+        generator = dijkstraSteps(start, end);
+      } else generator = kruskalSteps();
+      stepOnce();
+    }
+
+    function stepOnce() { if (!generator) return; const res = generator.next(); if (res.done) { log("Done."); playing = false; return; } }
+
+    function togglePlay() {
+      playing = !playing;
+      document.getElementById("playBtn").innerText = playing ? "Pause" : "Play";
+      if (playing) loop();
+    }
+
+    function loop() { if (!playing) return; stepOnce(); setTimeout(loop, parseInt(document.getElementById("speed").value)); }
+
+    function resetGraph() {
+      nodes = {}; edges = {}; nodeCount = 0; selectedNode = null; generator = null;
+      document.getElementById("startNode").innerHTML = "";
+      document.getElementById("endNode").innerHTML = "";
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      document.getElementById("explanation").innerHTML = "";
+    }
+
+    function log(msg) {
+      const exp = document.getElementById("explanation");
+      exp.innerHTML += msg+"<br>";
+      exp.scrollTop = exp.scrollHeight;
+    }
+
+    function loadPreset(type) {
+      resetGraph();
+      const cx = canvas.width / 2, cy = canvas.height / 2;
+      if (type === "triangle") {
+        nodes = { A:[cx-100, cy+50], B:[cx, cy-100], C:[cx+100, cy+50] };
+        edges = { A:[{v:"B",w:4},{v:"C",w:1}], B:[{v:"A",w:4},{v:"C",w:2}], C:[{v:"A",w:1},{v:"B",w:2}] };
+        nodeCount=3;
+      } else if (type === "square") {
+        nodes = { A:[cx-100, cy-100], B:[cx+100, cy-100], C:[cx+100, cy+100], D:[cx-100, cy+100] };
+        edges = {
+          A:[{v:"B",w:3},{v:"D",w:1}],
+          B:[{v:"A",w:3},{v:"C",w:4}],
+          C:[{v:"B",w:4},{v:"D",w:2}],
+          D:[{v:"A",w:1},{v:"C",w:2}]
+        };
+        nodeCount=4;
+      } else if (type === "chain") {
+        nodes = { A:[cx-200, cy], B:[cx-50, cy], C:[cx+100, cy], D:[cx+250, cy] };
+        edges = {
+          A:[{v:"B",w:5}],
+          B:[{v:"A",w:5},{v:"C",w:3}],
+          C:[{v:"B",w:3},{v:"D",w:6}],
+          D:[{v:"C",w:6}]
+        };
+        nodeCount=4;
+      } else if (type === "random") {
+        nodes={}; edges={}; nodeCount=0;
+        for(let i=0;i<5;i++){
+          const name=String.fromCharCode(65+nodeCount++);
+          nodes[name]=[cx+Math.cos(i*1.25)*150, cy+Math.sin(i*1.25)*150];
+          edges[name]=[];
+        }
+        const nodeNames=Object.keys(nodes);
+        for(let i=0;i<nodeNames.length;i++){
+          for(let j=i+1;j<nodeNames.length;j++){
+            if(Math.random()<0.4){
+              const w=Math.floor(Math.random()*9)+1;
+              edges[nodeNames[i]].push({v:nodeNames[j],w});
+              edges[nodeNames[j]].push({v:nodeNames[i],w});
+            }
+          }
+        }
+      }
+      updateSelectors();
+      drawGraph();
+    }
 
     drawGraph();
   </script>
 </body>
 </html>
+
