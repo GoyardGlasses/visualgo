@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Cyberpunk Graph Visualizer — Dijkstra & Kruskal</title>
+<title>Cyberpunk Graph Visualizer — Fixed Presets & Selectors</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#05030a; --panel:#0b0b17; --neon-cyan:#00ffe1; --neon-pink:#ff4df0; --neon-green:#7bff6b; --neon-orange:#ffb85c; --neon-red:#ff5370;
+  --neon-cyan:#00ffe1; --neon-pink:#ff4df0; --neon-green:#7bff6b; --neon-orange:#ffb85c; --neon-red:#ff5370;
   --muted:#9aa7b2;
 }
-html,body{height:100%;margin:0;background:linear-gradient(180deg,#030312 0%,#060316 100%);font-family:Orbitron,system-ui,Arial;color:var(--neon-cyan);}
+html,body{height:100%;margin:0;background:linear-gradient(180deg,#030312 0%,#060316 100%);font-family:Orbitron,Arial,monospace;color:var(--neon-cyan);}
 .app{display:grid;grid-template-columns:380px 1fr;gap:18px;padding:18px;height:100vh;box-sizing:border-box}
 .panel{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;padding:12px;border:1px solid rgba(255,255,255,0.03)}
 .sidebar{display:flex;flex-direction:column;gap:10px}
@@ -51,7 +51,7 @@ footer{font-size:12px;color:var(--muted);margin-top:6px}
     </div>
 
     <div>
-      <label>Presets (new random on each Load)</label><br/>
+      <label>Presets (random graph is new every Load)</label><br/>
       <select id="preset">
         <option value="">-- choose preset --</option>
         <option value="triangle">Triangle</option>
@@ -107,35 +107,23 @@ footer{font-size:12px;color:var(--muted);margin-top:6px}
 </div>
 
 <script>
-// ---------------------- constants & canvas ----------------------
+// ---------- setup ----------
 const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
-function resizeCanvas(){
-  canvas.width = document.getElementById('canvasWrap').clientWidth;
-  canvas.height = window.innerHeight - 36;
-  drawGraph();
-}
+function resizeCanvas(){ canvas.width = document.getElementById('canvasWrap').clientWidth; canvas.height = window.innerHeight - 36; drawGraph(); }
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
 const NODE_RADIUS = 22;
-const MAX_PATHS = 2000; // safety cap for enumeration
+const MAX_PATHS = 2000;
 
-// ---------------------- graph state ----------------------
-let nodes = {};      // label -> [x,y]
-let edges = {};      // label -> [{v:other, w:weight}, ...]
-let nodeCount = 0;
-let mode = 'add';                // add, edge, move, delete
+let nodes = {};    // label -> [x,y]
+let edges = {};    // label -> [{v:other, w:weight}, ...]
+let mode = 'add';
 let selectedForEdge = null;
-let dragging = null;
-let dragOffset = null;
+let dragging = null, dragOffset = null;
+let kruskalGen = null, playInterval = null;
 
-// kruskal generator state
-let kruskalGen = null;
-let playInterval = null;
-// For showFullPath
-let lastPrev = null;
-
-// ---------------------- UI refs ----------------------
+// UI refs
 const modeSel = document.getElementById('mode');
 const algoSel = document.getElementById('algorithm');
 const startSel = document.getElementById('startNode');
@@ -166,105 +154,108 @@ canvas.addEventListener('mousedown', onMouseDown);
 canvas.addEventListener('mousemove', onMouseMove);
 window.addEventListener('mouseup', onMouseUp);
 
-// ---------------------- drawing ----------------------
+// ---------- drawing ----------
 function drawGraph(highlights={node:{}, edge:{}}){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.lineWidth = 3;
   ctx.textAlign = 'center'; ctx.textBaseline='middle'; ctx.font='14px monospace';
 
-  // draw edges (once each direction; highlights keyed by 'u-v')
+  // Draw edges once (u < v) to avoid duplicates:
   for(const u in edges){
+    if(!(u in nodes)) continue;
     for(const e of edges[u]){
       const v = e.v;
-      // draw line
-      const key = `${u}-${v}`;
-      const col = highlights.edge && highlights.edge[key] ? highlights.edge[key] : '#888';
+      if(!(v in nodes)) continue;
+      if(u > v) continue; // draw once
+      // pick highlight color if present in either direction
+      const key1 = `${u}-${v}`, key2 = `${v}-${u}`;
+      const col = (highlights.edge && (highlights.edge[key1] || highlights.edge[key2])) ? (highlights.edge[key1] || highlights.edge[key2]) : '#888';
       ctx.strokeStyle = col;
-      ctx.shadowBlur = (col==='lime' || col==='var(--neon-green)') ? 12 : (col==='red'?6:0);
-      ctx.beginPath();
+      ctx.shadowBlur = (col === 'lime') ? 12 : (col === 'red' ? 6 : 0);
       const [x1,y1] = nodes[u], [x2,y2] = nodes[v];
-      ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
       ctx.shadowBlur = 0;
-      // weight label
       ctx.fillStyle = '#ffd66b';
       ctx.fillText(e.w, (x1+x2)/2, (y1+y2)/2 - 12);
     }
   }
 
-  // draw nodes
+  // Draw nodes
   for(const id in nodes){
     const [x,y] = nodes[id];
-    const fill = highlights.node && highlights.node[id] ? highlights.node[id] : 'cyan';
-    ctx.beginPath();
-    ctx.fillStyle = fill; ctx.strokeStyle='#000'; ctx.lineWidth = 2;
+    const fill = (highlights.node && highlights.node[id]) ? highlights.node[id] : 'cyan';
+    ctx.beginPath(); ctx.fillStyle = fill; ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
     ctx.arc(x,y,NODE_RADIUS,0,Math.PI*2); ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#071322'; ctx.font='bold 14px monospace'; ctx.fillText(id, x, y);
   }
 }
 
-// ---------------------- utilities ----------------------
-function uid(){ return String.fromCharCode(65 + nodeCount); }
-function addNodeAt(x,y,label=null){ const id = label || uid(); if(!label) nodeCount++; nodes[id] = [x,y]; edges[id] = edges[id] || []; updateSelectors(); drawGraph(); }
-function removeNode(id){ if(!nodes[id]) return; delete nodes[id]; delete edges[id]; for(const u in edges) edges[u] = edges[u].filter(e=> e.v !== id); updateSelectors(); drawGraph(); }
-function addEdge(u,v,w){ if(!edges[u]) edges[u]=[]; if(!edges[v]) edges[v]=[]; if(!edges[u].some(e=>e.v===v)) edges[u].push({v,w}); if(!edges[v].some(e=>e.v===u)) edges[v].push({v,w}); drawGraph(); }
-function findNodeAt(x,y){ for(const id in nodes){ const [nx,ny]=nodes[id]; if(Math.hypot(nx-x,ny-y) <= NODE_RADIUS) return id; } return null; }
-function updateSelectors(){ startSel.innerHTML=''; endSel.innerHTML=''; const keys = Object.keys(nodes).sort(); for(const k of keys){ const o1=document.createElement('option'); o1.value=k; o1.textContent=k; startSel.appendChild(o1); const o2=o1.cloneNode(true); endSel.appendChild(o2); } }
-
-// ---------------------- canvas interactions ----------------------
-function onCanvasClick(ev){
-  const rect = canvas.getBoundingClientRect();
-  const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
-  if(mode === 'add'){
-    addNodeAt(x,y);
-  } else if(mode === 'edge'){
-    const node = findNodeAt(x,y);
-    if(!node) return;
-    if(!selectedForEdge){ selectedForEdge = node; flashNode(node, 'var(--neon-orange)'); log(`Selected ${node} as endpoint 1`); }
-    else if(selectedForEdge === node){ log('Cannot connect node to itself'); selectedForEdge = null; drawGraph(); }
-    else {
-      const w = prompt(`Weight for edge ${selectedForEdge} ↔ ${node}`, '1');
-      const ww = Math.max(1, Number(w) || 1);
-      addEdge(selectedForEdge, node, ww);
-      log(`Added edge ${selectedForEdge} ↔ ${node} (w=${ww})`);
-      selectedForEdge = null;
-    }
-  } else if(mode === 'delete'){
-    const node = findNodeAt(x,y); if(node){ removeNode(node); log(`Deleted node ${node}`); }
+// ---------- utilities ----------
+function getNextLabel(){
+  for(let i=0;i<26;i++){
+    const c = String.fromCharCode(65+i);
+    if(!(c in nodes)) return c;
   }
+  // fallback
+  let i = 0;
+  while(true){ const c = 'N' + i++; if(!(c in nodes)) return c; }
 }
-function onMouseDown(ev){
-  if(mode !== 'move') return;
-  const rect = canvas.getBoundingClientRect();
-  const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
-  const node = findNodeAt(x,y);
-  if(node){ dragging = node; dragOffset = [x - nodes[node][0], y - nodes[node][1]]; }
-}
-function onMouseMove(ev){
-  if(!dragging) return;
-  const rect = canvas.getBoundingClientRect();
-  const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
-  nodes[dragging][0] = x - dragOffset[0]; nodes[dragging][1] = y - dragOffset[1];
+function addNodeAt(x,y,label=null){
+  const id = label || getNextLabel();
+  nodes[id] = [x,y];
+  edges[id] = edges[id] || [];
+  updateSelectors();
   drawGraph();
 }
-function onMouseUp(ev){ dragging = null; dragOffset = null; }
+function removeNode(id){
+  if(!nodes[id]) return;
+  delete nodes[id];
+  delete edges[id];
+  for(const u in edges) edges[u] = edges[u].filter(e=> e.v !== id);
+  updateSelectors(); drawGraph();
+}
+function addEdge(u,v,w){
+  if(!(u in edges)) edges[u] = [];
+  if(!(v in edges)) edges[v] = [];
+  if(!edges[u].some(e=>e.v===v)) edges[u].push({v,w});
+  if(!edges[v].some(e=>e.v===u)) edges[v].push({v,w});
+  drawGraph();
+}
+function findNodeAt(x,y){
+  for(const id in nodes){
+    const [nx,ny] = nodes[id];
+    if(Math.hypot(nx-x, ny-y) <= NODE_RADIUS) return id;
+  }
+  return null;
+}
+function updateSelectors(){
+  startSel.innerHTML = ''; endSel.innerHTML = '';
+  const keys = Object.keys(nodes).sort();
+  for(const k of keys){
+    const o1 = document.createElement('option'); o1.value = k; o1.textContent = k; startSel.appendChild(o1);
+    const o2 = document.createElement('option'); o2.value = k; o2.textContent = k; endSel.appendChild(o2);
+  }
+  if(keys.length){
+    startSel.value = keys[0];
+    endSel.value = keys[keys.length-1];
+  }
+}
+function log(msg){ explainBox.innerHTML += '• ' + msg + '<br>'; explainBox.scrollTop = explainBox.scrollHeight; }
+function clearLog(){ explainBox.innerHTML = ''; }
+function sleep(ms){ return new Promise(res=>setTimeout(res, ms)); }
 
-// small visual helper
-function flashNode(id, color='orange', ms=500){ drawGraph({node:{[id]:color}}); setTimeout(()=>drawGraph(), ms); }
-function log(s){ explainBox.innerHTML += '• ' + s + '<br>'; explainBox.scrollTop = explainBox.scrollHeight; }
-function clearLog(){ explainBox.innerHTML=''; }
-
-// ---------------------- Dijkstra core + all-paths enumeration ----------------------
+// ---------- Dijkstra + path enumeration ----------
 function computeDijkstra(start, end){
   const dist = {}, prev = {};
   for(const n in nodes){ dist[n] = Infinity; prev[n] = null; }
   dist[start] = 0;
-  const heap = [[0,start]];
+  const heap = [[0, start]];
   while(heap.length){
     heap.sort((a,b)=>a[0]-b[0]);
     const [d,u] = heap.shift();
     if(d > dist[u]) continue;
     if(u === end) break;
-    for(const e of edges[u] || []){
+    for(const e of edges[u]||[]){
       const v = e.v, w = e.w;
       if(dist[u] + w < dist[v]){ dist[v] = dist[u] + w; prev[v] = u; heap.push([dist[v], v]); }
     }
@@ -272,21 +263,20 @@ function computeDijkstra(start, end){
   return {dist, prev};
 }
 
-// enumerate simple paths with DFS, capped
 function enumerateAllSimplePaths(start, end){
   const results = []; const visited = new Set(); const path = [];
   function dfs(u){
     if(results.length >= MAX_PATHS) return;
     visited.add(u); path.push(u);
     if(u === end){
-      // compute weight
-      let total = 0;
+      let total = 0; let ok = true;
       for(let i=0;i+1<path.length;i++){
         const a = path[i], b = path[i+1];
         const e = edges[a].find(x=>x.v===b);
-        total += e ? e.w : Infinity;
+        if(!e){ ok = false; break; }
+        total += e.w;
       }
-      if(isFinite(total)) results.push({nodes:[...path], weight: total});
+      if(ok) results.push({nodes: [...path], weight: total});
     } else {
       for(const e of edges[u] || []){
         if(!visited.has(e.v)) dfs(e.v);
@@ -300,52 +290,48 @@ function enumerateAllSimplePaths(start, end){
 }
 function pickLMS(paths){
   if(!paths.length) return {long:null, mid:null, short:null};
-  const arr = paths.slice().sort((a,b)=>b.weight - a.weight); // desc
+  const arr = paths.slice().sort((a,b)=>b.weight - a.weight);
   const longest = arr[0];
   const shortest = arr[arr.length-1];
   const mid = arr[Math.floor(arr.length/2)] || arr[0];
   return {long:longest, mid:mid, short:shortest};
 }
-
 function drawPathHighlights(nodeList, color){
-  const hl = {node:{}, edge:{}};
-  for(const n of nodeList) hl.node[n] = color;
+  const h = {node:{}, edge:{}};
+  for(const n of nodeList) h.node[n] = color;
   for(let i=0;i+1<nodeList.length;i++){
-    const a = nodeList[i], b = nodeList[i+1];
-    hl.edge[`${a}-${b}`] = color; hl.edge[`${b}-${a}`] = color;
+    const a=nodeList[i], b=nodeList[i+1];
+    h.edge[`${a}-${b}`] = color; h.edge[`${b}-${a}`] = color;
   }
-  drawGraph(hl);
+  drawGraph(h);
 }
 
-function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
-
-async function highlightOnePath(nodeList, color, showMs){
-  drawPathHighlights(nodeList, color);
-  await sleep(showMs + 200);
-}
-
+// animate Long -> Mid -> Short
 async function animatePathSequence(picks){
-  const delay = Math.max(300, parseInt(speedRange.value)||900);
+  const delay = Math.max(300, parseInt(speedRange.value) || 900);
   drawGraph(); await sleep(300);
-  if(picks.long){ log(`Showing Longest (weight=${picks.long.weight})`); await highlightOnePath(picks.long.nodes, 'red', delay); }
-  if(picks.mid){ log(`Showing Medium (weight=${picks.mid.weight})`); await highlightOnePath(picks.mid.nodes, 'orange', delay); }
-  if(picks.short){ log(`Showing Shortest (weight=${picks.short.weight})`); await highlightOnePath(picks.short.nodes, 'lime', delay); }
-  lastPrev = null; // not storing prev here; showFull uses recompute
-  log('Sequence complete — shortest remains highlighted.');
+  if(picks.long){ log(`Showing Longest (weight=${picks.long.weight})`); drawPathHighlights(picks.long.nodes, 'var(--neon-red)'); await sleep(delay+200); }
+  if(picks.mid){ log(`Showing Medium (weight=${picks.mid.weight})`); drawPathHighlights(picks.mid.nodes, 'var(--neon-orange)'); await sleep(delay+200); }
+  if(picks.short){ log(`Showing Shortest (weight=${picks.short.weight})`); drawPathHighlights(picks.short.nodes, 'lime'); await sleep(delay+200); }
+  log('Sequence complete. Shortest remains highlighted.');
 }
 
-// ---------------------- Kruskal (generator for stepping) ----------------------
+// ---------- Kruskal generator ----------
 function* kruskalGenerator(){
   const all = [];
-  for(const u in edges){ for(const e of edges[u]){ if(u < e.v) all.push({u, v: e.v, w: e.w}); } }
+  for(const u in edges){
+    for(const e of edges[u]){
+      if(u < e.v) all.push({u, v: e.v, w: e.w});
+    }
+  }
   all.sort((a,b)=>a.w-b.w);
   const parent = {}, rank = {};
-  for(const n in nodes){ parent[n]=n; rank[n]=0; }
-  function find(x){ return parent[x]===x ? x : (parent[x] = find(parent[x])); }
+  for(const n in nodes){ parent[n] = n; rank[n] = 0; }
+  function find(x){ return parent[x] === x ? x : (parent[x] = find(parent[x])); }
   function unite(a,b){
-    a = find(a); b = find(b); if(a===b) return false;
+    a = find(a); b = find(b); if(a === b) return false;
     if(rank[a] < rank[b]) [a,b] = [b,a];
-    parent[b] = a; if(rank[a]===rank[b]) rank[a]++; return true;
+    parent[b] = a; if(rank[a] === rank[b]) rank[a]++; return true;
   }
   for(const e of all){
     yield {type:'consider', edge:e};
@@ -355,32 +341,31 @@ function* kruskalGenerator(){
   yield {type:'done'};
 }
 
-// ---------------------- flow controls ----------------------
+// ---------- flow controls ----------
 async function setupRun(){
   clearLog();
   const algo = algoSel.value;
   if(algo === 'dijkstra'){
     const start = startSel.value, end = endSel.value;
-    if(!start || !end){ log('Choose Start and End nodes'); return; }
-    log(`Dijkstra: enumerating paths from ${start} to ${end} (cap ${MAX_PATHS})`);
+    if(!start || !end){ log('Select Start and End nodes'); return; }
+    log(`Dijkstra: enumerating paths ${start} -> ${end} (cap ${MAX_PATHS})`);
     const paths = enumerateAllSimplePaths(start, end);
-    if(paths.length === 0){ log('No path exists'); return; }
-    if(paths.length >= MAX_PATHS) log(`Path count capped at ${MAX_PATHS} — results partial`);
+    if(!paths.length){ log('No path found'); return; }
+    if(paths.length >= MAX_PATHS) log(`Found >=${MAX_PATHS} paths (capped).`);
     const picks = pickLMS(paths);
-    log(`Found ${paths.length} path(s). Long=${picks.long? picks.long.weight:'N/A'} Mid=${picks.mid? picks.mid.weight:'N/A'} Short=${picks.short? picks.short.weight:'N/A'}`);
+    log(`Paths found: ${paths.length}. Long=${picks.long? picks.long.weight:'N/A'} Mid=${picks.mid? picks.mid.weight:'N/A'} Short=${picks.short? picks.short.weight:'N/A'}`);
     await animatePathSequence(picks);
   } else {
-    // Kruskal: prepare generator, initial draw
     kruskalGen = kruskalGenerator();
     drawGraph();
-    log('Kruskal ready — use Step or Play to run MST construction.');
+    log('Kruskal ready — use Step or Play to run MST.');
   }
 }
 
 async function stepOnce(){
   const algo = algoSel.value;
-  if(algo === 'dijkstra'){ log('Dijkstra runs as a full visualization after Setup — use Setup to run it.'); return; }
-  if(!kruskalGen){ kruskalGen = kruskalGenerator(); }
+  if(algo === 'dijkstra'){ log('Dijkstra runs full sequence on Setup. Use Setup.'); return; }
+  if(!kruskalGen) kruskalGen = kruskalGenerator();
   const nxt = kruskalGen.next();
   if(nxt.done){ log('Kruskal finished'); kruskalGen = null; return; }
   const v = nxt.value;
@@ -390,100 +375,86 @@ async function stepOnce(){
 }
 
 function togglePlay(){
-  if(playInterval){ clearInterval(playInterval); playInterval = null; playBtn.textContent = 'Play'; log('Paused autoplay'); }
+  if(playInterval){ clearInterval(playInterval); playInterval = null; playBtn.textContent = 'Play'; log('Paused'); }
   else {
     if(algoSel.value === 'dijkstra'){ log('Play is for Kruskal stepping. Use Setup for Dijkstra full visualization.'); return; }
     playBtn.textContent = 'Pause';
-    playInterval = setInterval(()=> stepOnce(), Math.max(150, parseInt(speedRange.value)));
+    playInterval = setInterval(()=> stepOnce(), Math.max(200, parseInt(speedRange.value)));
     log('Autoplay Kruskal started');
   }
 }
 
-// Instant show shortest path (recompute prev and highlight)
+// instant highlight shortest
 function showFullPath(){
-  if(algoSel.value !== 'dijkstra'){ log('Show Full Shortest only for Dijkstra'); return; }
+  if(algoSel.value !== 'dijkstra'){ log('Full-shortest is Dijkstra-only'); return; }
   const start = startSel.value, end = endSel.value;
   if(!start || !end){ log('Select start & end'); return; }
   const {dist, prev} = computeDijkstra(start, end);
   if(!isFinite(dist[end])){ log('No path'); return; }
-  // reconstruct shortest path
-  const lst = [];
+  // reconstruct
+  const seq = [];
   let cur = end;
-  while(cur){ lst.push(cur); cur = prev[cur]; if(!cur) break; if(lst.length>200) break; } // safety
-  lst.reverse();
-  drawPathHighlights(lst, 'lime');
-  log('Shortest path highlighted instantly.');
+  while(cur){ seq.push(cur); cur = prev[cur]; if(seq.length > 500) break; }
+  seq.reverse();
+  drawPathHighlights(seq, 'lime');
+  log('Shortest path shown.');
 }
 
 // reset
 function resetGraph(){
-  nodes = {}; edges = {}; nodeCount = 0; selectedForEdge = null; kruskalGen = null; lastPrev = null;
+  nodes = {}; edges = {}; mode = 'add'; selectedForEdge = null; kruskalGen = null;
   clearLog(); updateSelectors(); drawGraph();
 }
 
-// ---------------------- presets ----------------------
+// ---------- presets (use addNodeAt/addEdge to keep internal structure consistent) ----------
 function loadPreset(which){
   resetGraph();
   const cx = canvas.width/2, cy = canvas.height/2;
   if(which === 'triangle'){
-    nodes = {A:[cx-120,cy+60], B:[cx,cy-90], C:[cx+120,cy+60]}; edges = {A:[{v:'B',w:4},{v:'C',w:1}], B:[{v:'A',w:4},{v:'C',w:2}], C:[{v:'A',w:1},{v:'B',w:2}]}; nodeCount=3;
+    addNodeAt(cx-120,cy+60,'A'); addNodeAt(cx,cy-90,'B'); addNodeAt(cx+120,cy+60,'C');
+    addEdge('A','B',4); addEdge('B','C',2); addEdge('A','C',1);
   } else if(which === 'square'){
-    nodes = {A:[cx-140,cy-90], B:[cx+140, cy-90], C:[cx+140, cy+90], D:[cx-140, cy+90]};
-    edges = {A:[{v:'B',w:3},{v:'D',w:1}], B:[{v:'A',w:3},{v:'C',w:4}], C:[{v:'B',w:4},{v:'D',w:2}], D:[{v:'A',w:1},{v:'C',w:2}]}; nodeCount=4;
+    addNodeAt(cx-140,cy-90,'A'); addNodeAt(cx+140,cy-90,'B'); addNodeAt(cx+140,cy+90,'C'); addNodeAt(cx-140,cy+90,'D');
+    addEdge('A','B',3); addEdge('B','C',4); addEdge('C','D',2); addEdge('D','A',1);
   } else if(which === 'chain'){
-    nodes = {A:[cx-280,cy], B:[cx-100,cy], C:[cx+80,cy], D:[cx+260,cy]};
-    edges = {A:[{v:'B',w:5}], B:[{v:'A',w:5},{v:'C',w:3}], C:[{v:'B',w:3},{v:'D',w:6}], D:[{v:'C',w:6}]}; nodeCount=4;
+    addNodeAt(cx-280,cy,'A'); addNodeAt(cx-100,cy,'B'); addNodeAt(cx+80,cy,'C'); addNodeAt(cx+260,cy,'D');
+    addEdge('A','B',5); addEdge('B','C',3); addEdge('C','D',6);
   } else if(which === 'random'){
-    nodes = {}; edges = {}; nodeCount = 0;
     const N = 6 + Math.floor(Math.random()*3); // 6-8 nodes
-    for(let i=0;i<N;i++){
-      const n = String.fromCharCode(65 + nodeCount++);
-      const ang = i * (Math.PI*2/N);
-      nodes[n] = [cx + Math.cos(ang)*170 + (Math.random()-0.5)*40, cy + Math.sin(ang)*120 + (Math.random()-0.5)*40];
-      edges[n] = [];
-    }
-    const keys = Object.keys(nodes);
-    for(let i=0;i<keys.length;i++){
-      for(let j=i+1;j<keys.length;j++){
-        if(Math.random() < 0.45){
-          const w = Math.floor(Math.random()*9)+1;
-          edges[keys[i]].push({v:keys[j], w}); edges[keys[j]].push({v:keys[i], w});
-        }
+    const ids = [];
+    for(let i=0;i<N;i++){ const label = getNextLabel(); addNodeAt(cx + Math.cos(i * (2*Math.PI/N)) * 170 + (Math.random()-0.5)*30, cy + Math.sin(i*(2*Math.PI/N)) * 120 + (Math.random()-0.5)*30, label); ids.push(label); }
+    // randomly connect
+    for(let i=0;i<ids.length;i++){
+      for(let j=i+1;j<ids.length;j++){
+        if(Math.random() < 0.45){ const w = Math.floor(Math.random()*9)+1; addEdge(ids[i], ids[j], w); }
       }
     }
   } else if(which === 'star'){
-    nodes={}; edges={}; nodeCount=0;
-    nodes['A']=[cx,cy]; edges['A']=[]; nodeCount=1;
-    for(let i=0;i<6;i++){
-      const n = String.fromCharCode(65 + nodeCount++);
-      nodes[n]=[cx + Math.cos(i*(Math.PI*2/6))*180, cy + Math.sin(i*(Math.PI*2/6))*120]; edges[n]=[];
-      const w = Math.floor(Math.random()*8)+1;
-      edges['A'].push({v:n,w}); edges[n].push({v:'A',w});
-    }
+    const center = getNextLabel(); addNodeAt(canvas.width/2, canvas.height/2, center);
+    const leaves = [];
+    for(let i=0;i<6;i++){ const label = getNextLabel(); addNodeAt(canvas.width/2 + Math.cos(i*(2*Math.PI/6))*180, canvas.height/2 + Math.sin(i*(2*Math.PI/6))*120, label); leaves.push(label); }
+    for(const l of leaves){ addEdge(center, l, Math.floor(Math.random()*8)+1); }
   } else if(which === 'complete'){
-    nodes={}; edges={}; nodeCount=0;
     const N = 6;
-    for(let i=0;i<N;i++){ const n=String.fromCharCode(65+nodeCount++); nodes[n]=[cx+Math.cos(i*2*Math.PI/N)*160, cy+Math.sin(i*2*Math.PI/N)*120]; edges[n]=[]; }
-    const keys=Object.keys(nodes);
-    for(let i=0;i<keys.length;i++){ for(let j=i+1;j<keys.length;j++){ const w=Math.floor(Math.random()*9)+1; edges[keys[i]].push({v:keys[j],w}); edges[keys[j]].push({v:keys[i],w}); } }
+    const ids = [];
+    for(let i=0;i<N;i++){ const label = getNextLabel(); addNodeAt(canvas.width/2 + Math.cos(i*2*Math.PI/N)*160, canvas.height/2 + Math.sin(i*2*Math.PI/N)*120, label); ids.push(label); }
+    for(let i=0;i<ids.length;i++){ for(let j=i+1;j<ids.length;j++){ addEdge(ids[i], ids[j], Math.floor(Math.random()*9)+1); } }
   } else if(which === 'hexagon'){
-    nodes={}; edges={}; nodeCount=0;
-    for(let i=0;i<6;i++){ const n=String.fromCharCode(65+nodeCount++); const ang=i*(Math.PI*2/6); nodes[n]=[cx+Math.cos(ang)*170,cy+Math.sin(ang)*120]; edges[n]=[]; }
-    const keys=Object.keys(nodes);
-    for(let i=0;i<keys.length;i++){ const a=keys[i], b=keys[(i+1)%keys.length]; const w=Math.floor(Math.random()*9)+1; edges[a].push({v:b,w}); edges[b].push({v:a,w}); }
+    const ids = [];
+    for(let i=0;i<6;i++){ const label = getNextLabel(); addNodeAt(canvas.width/2 + Math.cos(i*(2*Math.PI/6))*170, canvas.height/2 + Math.sin(i*(2*Math.PI/6))*120, label); ids.push(label); }
+    for(let i=0;i<ids.length;i++){ addEdge(ids[i], ids[(i+1)%ids.length], Math.floor(Math.random()*9)+1); }
   }
-  updateSelectors(); drawGraph(); log(`Loaded preset: ${which}`);
+  updateSelectors(); drawGraph();
+  log(`Loaded preset: ${which}`);
 }
 
-// ------------------- initialize -------------------
-presetSel.value='triangle'; loadPreset('triangle');
-
-// expose some helpers for debugging (optional)
-// window._gv = { nodes, edges, drawGraph };
+// initial load
+loadPreset('triangle');
 
 </script>
 </body>
 </html>
+
 
 
 
