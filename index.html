@@ -1,168 +1,191 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Dijkstra Visualizer — Input Table</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    input { font-size: 14px; padding: 3px; margin: 2px; }
-    table, th, td { border: 1px solid #333; border-collapse: collapse; padding: 6px; }
-    #explainBox { border: 1px solid #888; padding: 10px; margin-top: 10px; min-height: 90px; background:#f8f8f8; white-space: pre-line; }
-    canvas { border: 1px solid #444; margin-top: 10px; display: block; }
-    .controls { margin-top: 10px; }
-    button { margin: 4px; padding: 6px 12px; }
-  </style>
+<meta charset="UTF-8">
+<title>Dijkstra Visualizer (Wordy Steps + Graph + Table)</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; }
+table, th, td { border: 1px solid black; border-collapse: collapse; padding: 6px; }
+#explainBox { border: 1px solid black; padding: 10px; margin-top: 10px; min-height: 80px; background: #f9f9f9; }
+canvas { border: 1px solid black; margin-top: 10px; }
+button { margin-top: 10px; padding:5px 10px; }
+</style>
 </head>
 <body>
-  <h2>Dijkstra Visualizer</h2>
 
-  <!-- Inputs -->
-  <div>
-    <label>Number of vertices (N): </label>
-    <input id="numVertices" type="number" min="2" value="4" />
-  </div>
-  <div>
-    <label>Number of edges: </label>
-    <input id="numEdges" type="number" min="1" value="5" />
-    <button onclick="makeEdgeInputs()">Generate Edge Inputs</button>
-  </div>
+<h2>Dijkstra’s Algorithm Visualizer</h2>
 
-  <div id="edgeInputs"></div>
-  <button id="buildBtn">Build Graph</button>
+<!-- Input Section -->
+<h3>Graph Input</h3>
+<label>Number of Vertices:</label>
+<input type="number" id="numVertices" min="2" value="4"><br><br>
 
-  <!-- Matrix -->
-  <h3>Adjacency Matrix</h3>
-  <div id="matrix"></div>
+<label>Number of Edges:</label>
+<input type="number" id="numEdges" min="1" value="5"><br><br>
 
-  <!-- Distance Table -->
-  <h3>Distance Table</h3>
-  <table id="distTable">
-    <thead>
-      <tr><th>Step</th><th>Chosen Node</th><th>Distances (d[])</th><th>Parents (π[])</th></tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+<button onclick="makeEdgeInputs()">Generate Edge Inputs</button>
+<div id="edgeInputs"></div>
+<button onclick="buildGraph()">Build Graph</button>
 
-  <!-- Explanation -->
-  <h3>Step Explanation & Final Paths</h3>
-  <div id="explainBox">Enter graph → Build → Step.</div>
+<!-- Adjacency Matrix -->
+<h3>Adjacency Matrix</h3>
+<div id="matrix"></div>
 
-  <!-- Graph -->
-  <h3>Graph Visualization</h3>
-  <canvas id="canvas" width="640" height="420"></canvas>
+<!-- Distance Table -->
+<h3>Distance Table</h3>
+<table id="distTable">
+  <thead>
+    <tr><th>Step</th><th>Chosen Node</th><th>Distances (d[])</th><th>Parents (π[])</th></tr>
+  </thead>
+  <tbody></tbody>
+</table>
 
-  <!-- Controls -->
-  <div class="controls">
-    <button id="resetBtn">Reset</button>
-    <button id="stepBtn">Step</button>
-    <button id="playBtn">Play</button>
-  </div>
+<!-- Explanation -->
+<h3>Step Explanation</h3>
+<div id="explainBox">Build a graph and click "Step".</div>
+
+<!-- Graph Visualization -->
+<h3>Graph Visualization</h3>
+<canvas id="canvas" width="600" height="400"></canvas>
+
+<!-- Controls -->
+<button onclick="resetDijkstra()">Reset</button>
+<button onclick="runStep()">Step</button>
 
 <script>
-(() => {
-  let V=0, adj=[], dist=[], parent=[], visited=[], edges=[];
-  let stepCount=0, playing=false, playInterval=null;
+let V=0,E=0;
+let adjMatrix=[], dist=[], parent=[], visited=[], pq=[], step=0, edges=[];
+let canvas=document.getElementById("canvas"), ctx=canvas.getContext("2d");
 
-  const buildBtn=document.getElementById("buildBtn"),
-        resetBtn=document.getElementById("resetBtn"),
-        stepBtn=document.getElementById("stepBtn"),
-        playBtn=document.getElementById("playBtn"),
-        matrixDiv=document.getElementById("matrix"),
-        explainBox=document.getElementById("explainBox"),
-        distTableBody=document.querySelector("#distTable tbody"),
-        canvas=document.getElementById("canvas"),
-        ctx=canvas.getContext("2d");
-
-  const indexToLetter=i=>String.fromCharCode(65+i);
-
-  function makeEdgeInputs(){
-    const E=parseInt(document.getElementById("numEdges").value);
-    let html="<h4>Enter Edges (u v w)</h4><p>(Use A,B,C... for vertices)</p><table>";
-    for(let i=0;i<E;i++){
-      html+=`<tr><td>Edge ${i+1}:</td>
-        <td><input size="1" id="u${i}" placeholder="u"></td>
-        <td><input size="1" id="v${i}" placeholder="v"></td>
-        <td><input size="2" id="w${i}" placeholder="w"></td></tr>`;
-    }
-    html+="</table>";
-    document.getElementById("edgeInputs").innerHTML=html;
+// Generate edge input fields
+function makeEdgeInputs(){
+  V=parseInt(document.getElementById("numVertices").value);
+  E=parseInt(document.getElementById("numEdges").value);
+  let html="<h4>Enter Edges (u v w)</h4><p>Use A,B,C... for vertices</p>";
+  for(let i=0;i<E;i++){
+    html+="Edge "+(i+1)+": <input size='1' id='u"+i+"' placeholder='u'>"+
+          "<input size='1' id='v"+i+"' placeholder='v'>"+
+          "<input size='2' id='w"+i+"' placeholder='w'><br>";
   }
+  document.getElementById("edgeInputs").innerHTML=html;
+}
 
-  function buildGraph(){
-    try{
-      V=parseInt(document.getElementById("numVertices").value);
-      const E=parseInt(document.getElementById("numEdges").value);
-      adj=Array.from({length:V},()=>Array(V).fill("∞"));
-      for(let i=0;i<V;i++)adj[i][i]=0;
-      edges=[];
-      for(let i=0;i<E;i++){
-        const uStr=document.getElementById("u"+i).value.trim().toUpperCase(),
-              vStr=document.getElementById("v"+i).value.trim().toUpperCase(),
-              w=parseInt(document.getElementById("w"+i).value.trim());
-        if(!uStr||!vStr||isNaN(w)) throw Error("Fill all edge boxes");
-        const u=uStr.charCodeAt(0)-65, v=vStr.charCodeAt(0)-65;
-        if(u<0||u>=V||v<0||v>=V) throw Error("Vertex out of range");
-        adj[u][v]=adj[v][u]=w;
-        edges.push({u,v,w,color:"black"});
-      }
-      renderMatrix();
-      resetAlgo();
-    }catch(e){alert("Error: "+e.message);}
+// Build adjacency matrix
+function buildGraph(){
+  adjMatrix=Array.from({length:V},()=>Array(V).fill("∞"));
+  edges=[];
+  for(let i=0;i<V;i++) adjMatrix[i][i]=0;
+  for(let i=0;i<E;i++){
+    let u=document.getElementById("u"+i).value.toUpperCase().charCodeAt(0)-65;
+    let v=document.getElementById("v"+i).value.toUpperCase().charCodeAt(0)-65;
+    let w=parseInt(document.getElementById("w"+i).value);
+    adjMatrix[u][v]=w; adjMatrix[v][u]=w;
+    edges.push({u,v,w,color:"black"});
   }
+  updateMatrix(); resetDijkstra(); drawGraph();
+}
 
-  function renderMatrix(){
-    let html="<table><tr><th></th>";
-    for(let j=0;j<V;j++)html+=`<th>${indexToLetter(j)}</th>`;
+// Show adjacency matrix
+function updateMatrix(){
+  let html="<table><tr><th></th>";
+  for(let i=0;i<V;i++) html+="<th>"+String.fromCharCode(65+i)+"</th>";
+  html+="</tr>";
+  for(let i=0;i<V;i++){
+    html+="<tr><th>"+String.fromCharCode(65+i)+"</th>";
+    for(let j=0;j<V;j++) html+="<td>"+adjMatrix[i][j]+"</td>";
     html+="</tr>";
-    for(let i=0;i<V;i++){html+=`<tr><th>${indexToLetter(i)}</th>`;
-      for(let j=0;j<V;j++)html+=`<td>${adj[i][j]}</td>`;html+="</tr>";}
-    matrixDiv.innerHTML=html;
   }
+  html+="</table>";
+  document.getElementById("matrix").innerHTML=html;
+}
 
-  function resetAlgo(){
-    dist=Array(V).fill(Infinity);parent=Array(V).fill(null);visited=Array(V).fill(false);
-    if(V>0)dist[0]=0;
-    stepCount=0;distTableBody.innerHTML="";explainBox.textContent="Ready. Step to start.";
-    edges.forEach(e=>e.color="black");drawGraph();
-  }
-
-  function drawGraph(){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    if(!V)return;
-    const cx=canvas.width/2,cy=canvas.height/2,R=Math.min(cx,cy)-80,pos=[];
-    for(let i=0;i<V;i++){let a=-Math.PI/2+2*Math.PI*i/V;pos.push({x:cx+R*Math.cos(a),y:cy+R*Math.sin(a)});}
-    ctx.textBaseline="middle";ctx.textAlign="center";ctx.font="14px Arial";
-    edges.forEach(e=>{let u=pos[e.u],v=pos[e.v];ctx.beginPath();ctx.strokeStyle=e.color;ctx.lineWidth=2;
-      ctx.moveTo(u.x,u.y);ctx.lineTo(v.x,v.y);ctx.stroke();
-      ctx.fillStyle="#000";ctx.fillText(e.w,(u.x+v.x)/2,(u.y+v.y)/2-6);});
-    for(let i=0;i<V;i++){let p=pos[i];ctx.beginPath();ctx.arc(p.x,p.y,22,0,2*Math.PI);
-      ctx.fillStyle="#cfe8ff";ctx.fill();ctx.strokeStyle="#333";ctx.stroke();
-      ctx.fillStyle="#000";ctx.fillText(indexToLetter(i),p.x,p.y);
-      ctx.fillText(dist[i]===Infinity?"∞":dist[i],p.x,p.y+30);}
-  }
-
-  function colorEdge(u,v,c){edges.forEach(e=>{if((e.u===u&&e.v===v)||(e.u===v&&e.v===u))e.color=c;});}
-  function pickNext(){let m=Infinity,idx=-1;for(let i=0;i<V;i++)if(!visited[i]&&dist[i]<m){m=dist[i];idx=i;}return idx;}
-  function appendRow(c){let d=dist.map(x=>x===Infinity?"∞":x).join(", "),p=parent.map(x=>x==null?"-":indexToLetter(x)).join(", ");distTableBody.innerHTML+=`<tr><td>${stepCount}</td><td>${c==null?"-":indexToLetter(c)}</td><td>${d}</td><td>${p}</td></tr>`;}
-  function runStep(){if(!V){alert("Build graph first");return;}let u=pickNext();if(u==-1){explainBox.textContent="✅ Finished";highlightTree();showPaths();return;}
-    visited[u]=true;stepCount++;let exp=`Step ${stepCount}: Pick ${indexToLetter(u)} (dist=${dist[u]}).\n\n`;
-    for(let v=0;v<V;v++)if(adj[u][v]!=="∞"&&!visited[v]){let cand=dist[u]+Number(adj[u][v]),cur=dist[v];
-      if(cand<cur){exp+=`✔ ${indexToLetter(u)}→${indexToLetter(v)} improves dist ${cur}→${cand}\n`;dist[v]=cand;parent[v]=u;colorEdge(u,v,"green");}
-      else if(cand===cur){exp+=`⚖ ${indexToLetter(u)}→${indexToLetter(v)} equal dist ${cand}\n`;colorEdge(u,v,"orange");}
-      else{exp+=`✘ ${indexToLetter(u)}→${indexToLetter(v)} worse (${cand}>${cur})\n`;colorEdge(u,v,"red");}}
-    appendRow(u);explainBox.textContent=exp;drawGraph();}
-  function highlightTree(){for(let v=1;v<V;v++)if(parent[v]!=null)colorEdge(parent[v],v,"green");drawGraph();}
-  function showPaths(){let out="\nFinal paths from A:\n";for(let v=1;v<V;v++){if(dist[v]===Infinity)out+=`No path to ${indexToLetter(v)}\n`;else{let path=[],cur=v;while(cur!=null){path.push(indexToLetter(cur));if(cur==0)break;cur=parent[cur];}path.reverse();out+=`Path to ${indexToLetter(v)}: ${path.join("→")} (Cost=${dist[v]})\n`;}}explainBox.textContent+=out;}
-
-  buildBtn.onclick=buildGraph;
-  resetBtn.onclick=()=>{if(playing){clearInterval(playInterval);playing=false;playBtn.textContent="Play";}if(V)resetAlgo();};
-  stepBtn.onclick=()=>{if(playing){clearInterval(playInterval);playing=false;playBtn.textContent="Play";}runStep();};
-  playBtn.onclick=()=>{if(!V){alert("Build graph first");return;}if(!playing){playing=true;playBtn.textContent="Pause";playInterval=setInterval(()=>{if(pickNext()==-1){clearInterval(playInterval);playing=false;playBtn.textContent="Play";runStep();return;}runStep();},900);}else{clearInterval(playInterval);playing=false;playBtn.textContent="Play";}};
+// Reset Dijkstra
+function resetDijkstra(){
+  dist=Array(V).fill(Infinity);
+  parent=Array(V).fill("-");
+  visited=Array(V).fill(false);
+  dist[0]=0; pq=[0]; step=0;
+  document.querySelector("#distTable tbody").innerHTML="";
+  document.getElementById("explainBox").innerHTML="Graph ready. Press Step to see how the algorithm finds the shortest paths.";
+  edges.forEach(e=>e.color="black");
   drawGraph();
-})();
+}
+
+// Run one step
+function runStep(){
+  if(pq.length==0){
+    document.getElementById("explainBox").innerHTML="✅ Algorithm finished! Green edges show the final shortest path tree.";
+    highlightFinalTree(); drawGraph(); return;
+  }
+  let u=pq.reduce((a,b)=>dist[a]<dist[b]?a:b); pq=pq.filter(x=>x!=u);
+  if(visited[u]) return runStep();
+  visited[u]=true;
+
+  let explain=`<strong>Step ${++step}:</strong> We now focus on node <strong>${String.fromCharCode(65+u)}</strong>, which currently has the smallest known distance of <strong>${dist[u]}</strong> from our starting point.<br>`;
+  explain+=`Think of this as saying: "We know the shortest way to reach ${String.fromCharCode(65+u)} from the start." This node is now settled.<br>`;
+
+  for(let v=0;v<V;v++){
+    if(adjMatrix[u][v]!="∞" && !visited[v]){
+      let candidate=dist[u]+parseInt(adjMatrix[u][v]);
+      if(candidate<dist[v]){
+        explain+=`✔ Neighbor <strong>${String.fromCharCode(65+v)}</strong>: path through ${String.fromCharCode(65+u)} gives distance ${candidate}, which is shorter than previous ${dist[v]==Infinity?"∞":dist[v]}. Update distance and mark this edge as part of the shortest path.<br>`;
+        dist[v]=candidate; parent[v]=String.fromCharCode(65+u); pq.push(v); colorEdge(u,v,"green");
+      } else if(candidate==dist[v]){
+        explain+=`⚖ Neighbor <strong>${String.fromCharCode(65+v)}</strong>: path through ${String.fromCharCode(65+u)} gives same distance (${candidate}) as current. We keep previous parent. Edge marked orange.<br>`;
+        colorEdge(u,v,"orange");
+      } else {
+        explain+=`✘ Neighbor <strong>${String.fromCharCode(65+v)}</strong>: path through ${String.fromCharCode(65+u)} gives distance ${candidate}, which is longer than current ${dist[v]}. Reject this path and mark edge red.<br>`;
+        colorEdge(u,v,"red");
+      }
+    }
+  }
+
+  // Update table
+  let row="<tr><td>"+step+"</td><td>"+String.fromCharCode(65+u)+"</td><td>"+dist.map(d=>d==Infinity?"∞":d).join(", ")+"</td><td>"+parent.join(", ")+"</td></tr>";
+  document.querySelector("#distTable tbody").innerHTML+=row;
+
+  document.getElementById("explainBox").innerHTML=explain;
+  drawGraph();
+}
+
+// Color an edge
+function colorEdge(u,v,color){
+  edges.forEach(e=>{if((e.u===u && e.v===v)||(e.u===v && e.v===u)) e.color=color;});
+}
+
+// Highlight final shortest path tree
+function highlightFinalTree(){
+  for(let v=1;v<V;v++){
+    if(parent[v]!=="-"){
+      let u=parent[v].charCodeAt(0)-65; colorEdge(u,v,"green");
+    }
+  }
+  drawGraph();
+}
+
+// Draw graph
+function drawGraph(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  let R=150, cx=300, cy=200, positions=[];
+  for(let i=0;i<V;i++){
+    let angle=2*Math.PI*i/V;
+    positions.push({x:cx+R*Math.cos(angle),y:cy+R*Math.sin(angle)});
+  }
+  edges.forEach(e=>{
+    let u=positions[e.u], v=positions[e.v];
+    ctx.beginPath(); ctx.strokeStyle=e.color; ctx.moveTo(u.x,u.y); ctx.lineTo(v.x,v.y); ctx.stroke();
+    ctx.fillStyle="black"; ctx.fillText(e.w,(u.x+v.x)/2,(u.y+v.y)/2);
+  });
+  for(let i=0;i<V;i++){
+    ctx.beginPath(); ctx.arc(positions[i].x,positions[i].y,20,0,2*Math.PI); ctx.fillStyle="lightblue"; ctx.fill(); ctx.stroke();
+    ctx.fillStyle="black"; ctx.fillText(String.fromCharCode(65+i),positions[i].x-5,positions[i].y+5);
+  }
+}
 </script>
 </body>
 </html>
+
+
 
 
 
