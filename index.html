@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Dijkstra Visualizer with Input</title>
+  <title>Dijkstra Visualizer (Simplified)</title>
   <style>
-    body { font-family: Arial; margin: 20px; }
-    table, th, td { border: 1px solid black; border-collapse: collapse; padding: 4px; }
-    #explainBox { border: 1px solid black; padding: 10px; margin-top: 10px; min-height: 50px; }
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table, th, td { border: 1px solid black; border-collapse: collapse; padding: 6px; }
+    #explainBox { border: 1px solid black; padding: 10px; margin-top: 10px; min-height: 60px; background: #f9f9f9; }
   </style>
 </head>
 <body>
@@ -56,10 +56,10 @@
     function makeEdgeInputs() {
       V = parseInt(document.getElementById("numVertices").value);
       E = parseInt(document.getElementById("numEdges").value);
-      let html = "<h4>Enter Edges (u v w)</h4>";
+      let html = "<h4>Enter Edges (u v w)</h4><p>(Use A,B,C... for vertices)</p>";
       for (let i = 0; i < E; i++) {
-        html += "Edge " + (i+1) + 
-          ": <input size='1' id='u"+i+"' placeholder='u'>" +
+        html += "Edge " + (i+1) + ": " +
+          "<input size='1' id='u"+i+"' placeholder='u'>" +
           "<input size='1' id='v"+i+"' placeholder='v'>" +
           "<input size='2' id='w"+i+"' placeholder='w'><br>";
       }
@@ -110,7 +110,7 @@
     // One step of Dijkstra
     function runStep() {
       if (pq.length==0) { 
-        document.getElementById("explainBox").innerHTML="Done!";
+        document.getElementById("explainBox").innerHTML="✅ Algorithm finished.";
         return;
       }
       // Pick node with smallest distance
@@ -125,12 +125,12 @@
         if (adjMatrix[u][v]!="∞" && !visited[v]) {
           let candidate = dist[u]+parseInt(adjMatrix[u][v]);
           if (candidate < dist[v]) {
-            exp += "Updating "+String.fromCharCode(65+v)+": candidate="+candidate+" < current="+dist[v]+" → update parent="+String.fromCharCode(65+u)+"<br>";
+            exp += "✔ Updating "+String.fromCharCode(65+v)+": candidate="+candidate+" < current="+dist[v]+" → parent="+String.fromCharCode(65+u)+"<br>";
             dist[v]=candidate;
             parent[v]=String.fromCharCode(65+u);
             pq.push(v);
           } else {
-            exp += "Rejecting "+String.fromCharCode(65+v)+": candidate="+candidate+" ≥ current="+dist[v]+"<br>";
+            exp += "✘ Rejecting "+String.fromCharCode(65+v)+": candidate="+candidate+" ≥ current="+dist[v]+"<br>";
           }
         }
       }
