@@ -1,8 +1,10 @@
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Dijkstra Visualizer (Complete)</title>
+  <title>Dijkstra Visualizer (Complete & Fixed)</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
     table, th, td { border: 1px solid black; border-collapse: collapse; padding: 6px; }
@@ -74,19 +76,40 @@
       document.getElementById("edgeInputs").innerHTML = html;
     }
 
-    // Build adjacency matrix
+    // Build adjacency matrix safely
     function buildGraph() {
+      if (V === 0 || E === 0) {
+        alert("Please enter number of vertices and edges first.");
+        return;
+      }
       adjMatrix = Array.from({length:V},()=>Array(V).fill("∞"));
       edges = [];
       for (let i=0; i<V; i++) adjMatrix[i][i]=0;
+
       for (let i=0; i<E; i++) {
-        let u = document.getElementById("u"+i).value.toUpperCase().charCodeAt(0)-65;
-        let v = document.getElementById("v"+i).value.toUpperCase().charCodeAt(0)-65;
-        let w = parseInt(document.getElementById("w"+i).value);
+        let uBox = document.getElementById("u"+i).value.trim().toUpperCase();
+        let vBox = document.getElementById("v"+i).value.trim().toUpperCase();
+        let wBox = document.getElementById("w"+i).value.trim();
+
+        if (!uBox || !vBox || !wBox) {
+          alert("Fill all edge fields before building graph.");
+          return;
+        }
+
+        let u = uBox.charCodeAt(0)-65;
+        let v = vBox.charCodeAt(0)-65;
+        let w = parseInt(wBox);
+
+        if (u<0 || u>=V || v<0 || v>=V) {
+          alert("Invalid vertex name. Use A,B,C,... within number of vertices.");
+          return;
+        }
+
         adjMatrix[u][v]=w;
         adjMatrix[v][u]=w; // undirected
         edges.push({u,v,w,color:"black"});
       }
+
       updateMatrix();
       resetDijkstra();
       drawGraph();
@@ -251,7 +274,6 @@
   </script>
 </body>
 </html>
-
 
 
 
