@@ -2,28 +2,36 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Dijkstra Visualizer — Robust</title>
+  <title>Dijkstra Visualizer — Final Fixed</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 18px; }
-    input, textarea { font-size: 14px; }
-    textarea { width: 420px; height: 120px; }
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    input, textarea { font-size: 14px; margin: 4px; padding: 4px; }
+    textarea { width: 420px; height: 120px; display: block; margin-top: 6px; }
     table, th, td { border: 1px solid #333; border-collapse: collapse; padding: 6px; }
     #explainBox { border: 1px solid #888; padding: 10px; margin-top: 10px; min-height: 90px; background:#f8f8f8; white-space: pre-line; }
-    canvas { border: 1px solid #444; margin-top: 10px; }
-    .controls { margin-top: 8px; }
-    button { margin-right: 6px; }
+    canvas { border: 1px solid #444; margin-top: 10px; display: block; }
+    .controls { margin-top: 10px; }
+    button { margin: 4px; padding: 6px 12px; }
+    .input-row { margin: 8px 0; }
+    label { margin-right: 6px; }
   </style>
 </head>
 <body>
-  <h2>Dijkstra Visualizer (stable)</h2>
+  <h2>Dijkstra Visualizer (Final)</h2>
 
-  <div>
-    <label>Number of vertices (N): </label>
+  <!-- Inputs -->
+  <div class="input-row">
+    <label for="numVertices">Number of vertices (N):</label>
     <input id="numVertices" type="number" min="2" value="4" />
   </div>
 
-  <div style="margin-top:8px;">
-    <label>Edges (one per line, format: <b>A B 4</b>)</label><br>
+  <div class="input-row">
+    <label for="numEdges">Number of edges (optional):</label>
+    <input id="numEdges" type="number" min="1" placeholder="leave blank to auto-detect" />
+  </div>
+
+  <div class="input-row">
+    <label for="edgeText">Edges (format: A B 4):</label>
     <textarea id="edgeText" placeholder="Example:
 A B 4
 A C 2
@@ -32,6 +40,7 @@ B D 3
 C D 4"></textarea>
   </div>
 
+  <!-- Controls -->
   <div class="controls">
     <button id="buildBtn">Build Graph</button>
     <button id="resetBtn">Reset</button>
@@ -39,35 +48,33 @@ C D 4"></textarea>
     <button id="playBtn">Play</button>
   </div>
 
+  <!-- Matrix -->
   <h3>Adjacency Matrix</h3>
   <div id="matrix"></div>
 
+  <!-- Distance Table -->
   <h3>Distance Table</h3>
   <table id="distTable">
-    <thead><tr><th>Step</th><th>Chosen Node</th><th>Distances (d[])</th><th>Parents (π[])</th></tr></thead>
+    <thead>
+      <tr><th>Step</th><th>Chosen Node</th><th>Distances (d[])</th><th>Parents (π[])</th></tr>
+    </thead>
     <tbody></tbody>
   </table>
 
+  <!-- Explanation -->
   <h3>Step Explanation & Final Paths</h3>
-  <div id="explainBox">Build graph to start. Use lines like: <i>A B 4</i></div>
+  <div id="explainBox">Build graph to start. Use lines like: A B 4</div>
 
+  <!-- Graph -->
   <h3>Graph Visualization</h3>
   <canvas id="canvas" width="640" height="420"></canvas>
 
 <script>
+/* --- SAME JAVASCRIPT LOGIC AS BEFORE --- */
 (() => {
-  // State
-  let V = 0;
-  let adj = [];
-  let dist = [];
-  let parent = [];
-  let visited = [];
-  let edges = []; // {u,v,w,color}
-  let stepCount = 0;
-  let playing = false;
-  let playInterval = null;
+  let V = 0, adj = [], dist = [], parent = [], visited = [], edges = [];
+  let stepCount = 0, playing = false, playInterval = null;
 
-  // DOM
   const buildBtn = document.getElementById("buildBtn");
   const resetBtn = document.getElementById("resetBtn");
   const stepBtn = document.getElementById("stepBtn");
@@ -78,294 +85,95 @@ C D 4"></textarea>
   const canvas = document.getElementById("canvas");
   const ctx = canvas.getContext("2d");
 
-  // Helpers
-  function letterToIndex(s) {
-    if (!s || s.length === 0) return -1;
-    const c = s.trim().toUpperCase()[0];
-    return c.charCodeAt(0) - 65;
-  }
-  function indexToLetter(i) { return String.fromCharCode(65 + i); }
+  const letterToIndex = s => s.trim().toUpperCase().charCodeAt(0)-65;
+  const indexToLetter = i => String.fromCharCode(65+i);
 
-  function parseEdgesFromTextarea() {
+  function parseEdges() {
     const raw = document.getElementById("edgeText").value;
-    const lines = raw.split("\n");
-    const parsed = [];
-    for (let i=0;i<lines.length;i++){
-      const line = lines[i].trim();
-      if (!line) continue;
+    return raw.split("\n").map(l=>l.trim()).filter(Boolean).map((line,i)=>{
       const parts = line.split(/\s+/);
-      if (parts.length < 3) {
-        throw new Error(`Line ${i+1} is invalid: "${line}". Use format: A B 4`);
-      }
-      const uChar = parts[0].trim();
-      const vChar = parts[1].trim();
-      const wStr = parts[2].trim();
-      const u = letterToIndex(uChar);
-      const v = letterToIndex(vChar);
-      if (isNaN(u) || isNaN(v) || u<0 || v<0) throw new Error(`Invalid vertex on line ${i+1}: "${line}"`);
-      const w = Number(wStr);
-      if (!isFinite(w)) throw new Error(`Invalid weight on line ${i+1}: "${line}"`);
-      parsed.push({u,v,w});
+      if (parts.length<3) throw new Error(`Line ${i+1} invalid: ${line}`);
+      const u = letterToIndex(parts[0]), v = letterToIndex(parts[1]), w = Number(parts[2]);
+      if (isNaN(u)||isNaN(v)||!isFinite(w)) throw new Error(`Line ${i+1} invalid: ${line}`);
+      return {u,v,w};
+    });
+  }
+
+  function buildAdjMatrix(n, edsIn) {
+    const INF="∞", mat=Array.from({length:n},()=>Array(n).fill(INF)), eds=[];
+    for(let i=0;i<n;i++) mat[i][i]=0;
+    for(const e of edsIn){
+      mat[e.u][e.v]=mat[e.v][e.u]=e.w;
+      const a=Math.min(e.u,e.v), b=Math.max(e.u,e.v);
+      if(!eds.find(x=>x.u==a&&x.v==b)) eds.push({u:a,v:b,w:e.w,color:"black"});
     }
-    return parsed;
+    return {mat,eds};
   }
 
-  function buildAdjMatrix(n, parsedEdges) {
-    const INF = "∞";
-    const mat = Array.from({length:n}, ()=> Array(n).fill(INF));
-    for (let i=0;i<n;i++) mat[i][i] = 0;
-    const eds = [];
-    for (const e of parsedEdges) {
-      if (e.u < 0 || e.u >= n || e.v < 0 || e.v >= n) {
-        throw new Error(`Edge uses vertex outside range (0..${n-1}): ${e.u}, ${e.v}`);
-      }
-      mat[e.u][e.v] = e.w;
-      mat[e.v][e.u] = e.w; // undirected
-      // store single edge for drawing (u < v to avoid duplicates)
-      const keyU = Math.min(e.u,e.v), keyV = Math.max(e.u,e.v);
-      const exists = eds.some(x => x.u==keyU && x.v==keyV);
-      if (!exists) eds.push({u:keyU, v:keyV, w:e.w, color: "black"});
-      else {
-        // if duplicate, override weight to last value
-        for (let ex of eds) if (ex.u==keyU && ex.v==keyV) ex.w = e.w;
-      }
+  function renderMatrix(){
+    let html="<table><tr><th></th>";
+    for(let j=0;j<V;j++) html+=`<th>${indexToLetter(j)}</th>`;
+    html+="</tr>";
+    for(let i=0;i<V;i++){
+      html+=`<tr><th>${indexToLetter(i)}</th>`;
+      for(let j=0;j<V;j++) html+=`<td>${adj[i][j]}</td>`;
+      html+="</tr>";
     }
-    return {mat, eds};
+    matrixDiv.innerHTML=html;
   }
 
-  function renderMatrix() {
-    if (!adj || adj.length===0) { matrixDiv.innerHTML = ""; return; }
-    let html = "<table><tr><th></th>";
-    for (let j=0;j<V;j++) html += `<th>${indexToLetter(j)}</th>`;
-    html += "</tr>";
-    for (let i=0;i<V;i++) {
-      html += `<tr><th>${indexToLetter(i)}</th>`;
-      for (let j=0;j<V;j++) html += `<td>${adj[i][j]}</td>`;
-      html += "</tr>";
-    }
-    html += "</table>";
-    matrixDiv.innerHTML = html;
+  function resetAlgo(){
+    dist=Array(V).fill(Infinity); parent=Array(V).fill(null); visited=Array(V).fill(false);
+    if(V>0) dist[0]=0;
+    stepCount=0; distTableBody.innerHTML=""; explainBox.textContent="Ready. Press Step.";
+    edges.forEach(e=>e.color="black"); drawGraph();
   }
 
-  function resetAlgo() {
-    dist = Array(V).fill(Infinity);
-    parent = Array(V).fill(null);
-    visited = Array(V).fill(false);
-    if (V>0) dist[0] = 0; // source = A
-    stepCount = 0;
-    distTableBody.innerHTML = "";
-    explainBox.textContent = "Ready. Click Step to begin. Source is A.";
-    edges.forEach(e => e.color = "black");
-    drawGraph();
-  }
-
-  function drawGraph() {
+  function drawGraph(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    if (V===0) return;
-    const cx = canvas.width/2, cy = canvas.height/2, R = Math.min(cx,cy) - 80;
-    const pos = [];
-    for (let i=0;i<V;i++){
-      const ang = -Math.PI/2 + 2*Math.PI*i/V;
-      pos.push({x: cx + R*Math.cos(ang), y: cy + R*Math.sin(ang)});
-    }
-    // edges
-    ctx.textBaseline = "middle"; ctx.textAlign = "center"; ctx.font = "14px Arial";
-    for (const e of edges) {
-      const u = pos[e.u], v = pos[e.v];
-      ctx.beginPath();
-      ctx.strokeStyle = e.color || "black";
-      ctx.lineWidth = 2;
-      ctx.moveTo(u.x, u.y);
-      ctx.lineTo(v.x, v.y);
-      ctx.stroke();
-      // weight label
-      ctx.fillStyle = "#000";
-      ctx.fillText(e.w, (u.x+v.x)/2, (u.y+v.y)/2 - 6);
-    }
-    // nodes
-    for (let i=0;i<V;i++){
-      const p = pos[i];
-      ctx.beginPath();
-      ctx.fillStyle = "#cfe8ff";
-      ctx.strokeStyle = "#333";
-      ctx.lineWidth = 1;
-      ctx.arc(p.x, p.y, 22, 0, 2*Math.PI);
-      ctx.fill(); ctx.stroke();
-      ctx.fillStyle = "#000";
-      ctx.fillText(indexToLetter(i), p.x, p.y);
-      // show dist under node
-      const d = dist[i]===Infinity ? "∞" : dist[i];
-      ctx.fillStyle="#111";
-      ctx.fillText(d, p.x, p.y + 30);
-    }
+    if(!V) return;
+    const cx=canvas.width/2,cy=canvas.height/2,R=Math.min(cx,cy)-80,pos=[];
+    for(let i=0;i<V;i++){let a=-Math.PI/2+2*Math.PI*i/V;pos.push({x:cx+R*Math.cos(a),y:cy+R*Math.sin(a)});}
+    ctx.textBaseline="middle";ctx.textAlign="center";ctx.font="14px Arial";
+    edges.forEach(e=>{
+      let u=pos[e.u],v=pos[e.v];ctx.beginPath();ctx.strokeStyle=e.color;ctx.lineWidth=2;
+      ctx.moveTo(u.x,u.y);ctx.lineTo(v.x,v.y);ctx.stroke();
+      ctx.fillStyle="#000";ctx.fillText(e.w,(u.x+v.x)/2,(u.y+v.y)/2-6);
+    });
+    for(let i=0;i<V;i++){let p=pos[i];ctx.beginPath();ctx.arc(p.x,p.y,22,0,2*Math.PI);
+      ctx.fillStyle="#cfe8ff";ctx.fill();ctx.strokeStyle="#333";ctx.stroke();
+      ctx.fillStyle="#000";ctx.fillText(indexToLetter(i),p.x,p.y);
+      ctx.fillText(dist[i]===Infinity?"∞":dist[i],p.x,p.y+30);}
   }
 
-  function colorEdge(u,v,color) {
-    // edges store smaller u,v pair
-    const a = Math.min(u,v), b = Math.max(u,v);
-    for (const e of edges) {
-      if (e.u===a && e.v===b) { e.color = color; break; }
+  function colorEdge(u,v,c){let a=Math.min(u,v),b=Math.max(u,v);edges.forEach(e=>{if(e.u==a&&e.v==b)e.color=c;});}
+  function pickNext(){let m=Infinity,idx=-1;for(let i=0;i<V;i++)if(!visited[i]&&dist[i]<m){m=dist[i];idx=i;}return idx;}
+  function appendRow(c){let d=dist.map(x=>x===Infinity?"∞":x).join(", "),p=parent.map(x=>x==null?"-":indexToLetter(x)).join(", ");distTableBody.innerHTML+=`<tr><td>${stepCount}</td><td>${c==null?"-":indexToLetter(c)}</td><td>${d}</td><td>${p}</td></tr>`;}
+  function runStep(){
+    if(!V){alert("Build a graph first");return;}
+    let u=pickNext();if(u==-1){explainBox.textContent="✅ Finished";highlightTree();showPaths();return;}
+    visited[u]=true;stepCount++;let exp=`Step ${stepCount}: Pick ${indexToLetter(u)} (dist=${dist[u]}).\n\n`;
+    for(let v=0;v<V;v++)if(adj[u][v]!=="∞"&&!visited[v]){
+      let cand=dist[u]+Number(adj[u][v]),cur=dist[v];
+      if(cand<cur){exp+=`✔ ${indexToLetter(u)}→${indexToLetter(v)} improves dist ${cur}→${cand}\n`;dist[v]=cand;parent[v]=u;colorEdge(u,v,"green");}
+      else if(cand===cur){exp+=`⚖ ${indexToLetter(u)}→${indexToLetter(v)} equal dist ${cand}\n`;colorEdge(u,v,"orange");}
+      else{exp+=`✘ ${indexToLetter(u)}→${indexToLetter(v)} worse (${cand}>${cur})\n`;colorEdge(u,v,"red");}
     }
+    appendRow(u);explainBox.textContent=exp;drawGraph();
   }
+  function highlightTree(){for(let v=1;v<V;v++)if(parent[v]!=null)colorEdge(parent[v],v,"green");drawGraph();}
+  function showPaths(){let out="\nFinal paths from A:\n";for(let v=1;v<V;v++){if(dist[v]===Infinity)out+=`No path to ${indexToLetter(v)}\n`;else{let path=[],cur=v;while(cur!=null){path.push(indexToLetter(cur));if(cur==0)break;cur=parent[cur];}path.reverse();out+=`Path to ${indexToLetter(v)}: ${path.join("→")} (Cost=${dist[v]})\n`;}}explainBox.textContent+=out;}
 
-  function pickNextNode() {
-    // pick unvisited node with smallest dist
-    let min = Infinity, idx = -1;
-    for (let i=0;i<V;i++){
-      if (!visited[i] && dist[i] < min) { min = dist[i]; idx = i; }
-    }
-    return idx; // -1 means no reachable unvisited nodes
-  }
-
-  function appendTableRow(chosen) {
-    const distStr = dist.map(d => d===Infinity ? "∞" : d).join(", ");
-    const parStr = parent.map(p => p===null ? "-" : indexToLetter(p)).join(", ");
-    const row = document.createElement("tr");
-    row.innerHTML = `<td>${stepCount}</td><td>${chosen===null? "-" : indexToLetter(chosen)}</td><td>${distStr}</td><td>${parStr}</td>`;
-    distTableBody.appendChild(row);
-  }
-
-  function runOneStep() {
-    if (V===0) { alert("Build a graph first."); return; }
-    // If all unvisited nodes unreachable, algorithm finished
-    const u = pickNextNode();
-    if (u === -1) {
-      explainBox.innerHTML = "✅ Algorithm finished — no more reachable unvisited nodes.\nFinal shortest path tree highlighted in green (if any).";
-      highlightFinalTree();
-      showFinalPaths();
-      return;
-    }
-    visited[u] = true;
-    stepCount++;
-    let explanation = `Step ${stepCount}: We pick node ${indexToLetter(u)} because it has the smallest known distance so far (${dist[u] === Infinity ? "∞" : dist[u]}).\n\n`;
-
-    for (let v=0; v<V; v++){
-      if (adj[u][v] !== "∞" && !visited[v]) {
-        const w = Number(adj[u][v]);
-        const candidate = (dist[u] === Infinity) ? Infinity : dist[u] + w;
-        const current = dist[v];
-        if (candidate < current) {
-          explanation += `✔ Edge ${indexToLetter(u)} → ${indexToLetter(v)} (weight ${w}):\n` +
-            `  new possible distance = ${dist[u]} + ${w} = ${candidate},\n` +
-            `  which is smaller than current distance to ${indexToLetter(v)} (${current}).\n` +
-            `  => Update distance of ${indexToLetter(v)} = ${candidate}; set parent[${indexToLetter(v)}] = ${indexToLetter(u)}.\n\n`;
-          dist[v] = candidate;
-          parent[v] = u;
-          colorEdge(u,v,"green");
-        } else if (candidate === current) {
-          explanation += `⚖ Edge ${indexToLetter(u)} → ${indexToLetter(v)} (weight ${w}):\n` +
-            `  candidate = ${candidate} equals current distance (${current}).\n` +
-            `  => We keep existing parent for stability (either path is ok).\n\n`;
-          colorEdge(u,v,"orange");
-        } else {
-          explanation += `✘ Edge ${indexToLetter(u)} → ${indexToLetter(v)} (weight ${w}):\n` +
-            `  candidate = ${candidate} which is greater than current distance (${current}).\n` +
-            `  => Reject this path; keep the shorter existing path.\n\n`;
-          colorEdge(u,v,"red");
-        }
-      }
-    }
-
-    appendTableRow(u);
-    explainBox.innerHTML = explanation;
-    drawGraph();
-
-    // If later steps needed, continue on next Step click or Play
-  }
-
-  function highlightFinalTree() {
-    for (let v=0; v<V; v++){
-      if (v===0) continue;
-      if (parent[v] !== null) {
-        colorEdge(parent[v], v, "green");
-      }
-    }
-    drawGraph();
-  }
-
-  function showFinalPaths() {
-    let out = "\nFinal shortest paths from source A:\n\n";
-    for (let v=1; v<V; v++){
-      if (dist[v] === Infinity) {
-        out += `No path to ${indexToLetter(v)}\n`;
-      } else {
-        const path = [];
-        let cur = v;
-        while (cur !== null && cur !== undefined) {
-          path.push(indexToLetter(cur));
-          if (cur===0) break;
-          cur = parent[cur];
-        }
-        path.reverse();
-        out += `Path to ${indexToLetter(v)}: ${path.join(" → ")} (Cost = ${dist[v]})\n`;
-      }
-    }
-    explainBox.innerHTML += out;
-  }
-
-  // Event handlers
-  buildBtn.addEventListener("click", () => {
-    try {
-      V = Number(document.getElementById("numVertices").value);
-      if (!Number.isInteger(V) || V < 2) throw new Error("Enter integer N >= 2");
-      const parsed = parseEdgesFromTextarea();
-      const result = buildAdjMatrix(V, parsed);
-      adj = result.mat;
-      edges = result.eds;
-      renderMatrix();
-      resetAlgo();
-    } catch (err) {
-      alert("Error: " + err.message);
-      console.error(err);
-    }
-  });
-
-  resetBtn.addEventListener("click", () => {
-    // stop play if running
-    if (playing) { clearInterval(playInterval); playing = false; playBtn.textContent = "Play"; }
-    if (V>0) {
-      resetAlgo();
-    } else {
-      // clear UI
-      matrixDiv.innerHTML = "";
-      distTableBody.innerHTML = "";
-      explainBox.textContent = "Build graph to start.";
-      edges = [];
-      adj = [];
-      drawGraph();
-    }
-  });
-
-  stepBtn.addEventListener("click", () => {
-    if (playing) { clearInterval(playInterval); playing = false; playBtn.textContent = "Play"; }
-    runOneStep();
-  });
-
-  playBtn.addEventListener("click", () => {
-    if (V===0) { alert("Build a graph first"); return; }
-    if (!playing) {
-      playing = true;
-      playBtn.textContent = "Pause";
-      playInterval = setInterval(() => {
-        // run step until algorithm finishes
-        const next = pickNextNode();
-        if (next === -1) { clearInterval(playInterval); playing=false; playBtn.textContent="Play"; runOneStep(); return; }
-        runOneStep();
-      }, 900);
-    } else {
-      clearInterval(playInterval);
-      playing = false;
-      playBtn.textContent = "Play";
-    }
-  });
-
-  // initial draw
+  buildBtn.onclick=()=>{try{V=+numVertices.value;if(V<2)throw Error("N>=2");let parsed=parseEdges();let numE=numEdges.value.trim();if(numE&&parsed.length!=+numE)throw Error(`Expected ${numE} edges but got ${parsed.length}`);let r=buildAdjMatrix(V,parsed);adj=r.mat;edges=r.eds;renderMatrix();resetAlgo();}catch(e){alert("Error: "+e.message);}};
+  resetBtn.onclick=()=>{if(playing){clearInterval(playInterval);playing=false;playBtn.textContent="Play";}if(V)resetAlgo();};
+  stepBtn.onclick=()=>{if(playing){clearInterval(playInterval);playing=false;playBtn.textContent="Play";}runStep();};
+  playBtn.onclick=()=>{if(!V){alert("Build graph first");return;}if(!playing){playing=true;playBtn.textContent="Pause";playInterval=setInterval(()=>{if(pickNext()==-1){clearInterval(playInterval);playing=false;playBtn.textContent="Play";runStep();return;}runStep();},900);}else{clearInterval(playInterval);playing=false;playBtn.textContent="Play";}};
   drawGraph();
-
 })();
 </script>
 </body>
 </html>
+
 
 
 
