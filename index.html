@@ -1,157 +1,149 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Graph Algorithm Visualizer</title>
-<style>
-  body { margin:0; font-family: Arial, sans-serif; background:#111; color:#eee; }
-  .app { display:flex; height:100vh; }
-  .sidebar { width:260px; background:#222; padding:10px; box-sizing:border-box; display:flex; flex-direction:column; gap:10px; }
-  select,button { width:100%; padding:6px; margin-top:4px; background:#333; color:#eee; border:1px solid #555; border-radius:4px; }
-  button:hover { background:#444; cursor:pointer; }
-  #explain { flex:1; background:#111; border:1px solid #444; padding:6px; overflow:auto; font-size:13px; }
-  canvas { flex:1; background:#000; }
-  .legend { font-size:12px; margin-top:6px; }
-  .legend div { margin:2px 0; }
-</style>
+  <meta charset="UTF-8">
+  <title>Dijkstra Visualizer with Input</title>
+  <style>
+    body { font-family: Arial; margin: 20px; }
+    table, th, td { border: 1px solid black; border-collapse: collapse; padding: 4px; }
+    #explainBox { border: 1px solid black; padding: 10px; margin-top: 10px; min-height: 50px; }
+  </style>
 </head>
 <body>
-<div class="app">
-  <div class="sidebar">
-    <h3>Graph Visualizer</h3>
-    <label>Preset Graph</label>
-    <select id="preset">
-      <option value="triangle">Triangle</option>
-      <option value="square">Square</option>
-      <option value="chain">Chain</option>
-      <option value="star">Star</option>
-      <option value="complete">Complete</option>
-      <option value="hexagon">Hexagon</option>
-      <option value="random">Random</option>
-    </select>
-    <button id="loadBtn">Load Preset</button>
+  <h2>Dijkstra’s Algorithm Visualizer</h2>
 
-    <label>Algorithm</label>
-    <select id="algo">
-      <option value="dijkstra">Dijkstra</option>
-      <option value="kruskal">Kruskal</option>
-    </select>
+  <!-- Input Section -->
+  <h3>Graph Input</h3>
+  <label>Number of Vertices:</label>
+  <input type="number" id="numVertices" min="2" value="4"><br><br>
 
-    <label>Start Node</label>
-    <select id="start"></select>
-    <label>End Node</label>
-    <select id="end"></select>
+  <label>Number of Edges:</label>
+  <input type="number" id="numEdges" min="1" value="5"><br><br>
 
-    <button id="setupBtn">Setup</button>
-    <button id="stepBtn">Step</button>
-    <button id="playBtn">Play</button>
+  <button onclick="makeEdgeInputs()">Generate Edge Inputs</button>
+  <div id="edgeInputs"></div>
+  <button onclick="buildGraph()">Build Graph</button>
 
-    <div class="legend">
-      <strong>Legend</strong>
-      <div style="color:red">Longest Path</div>
-      <div style="color:orange">Medium Path</div>
-      <div style="color:lime">Shortest Path / MST Edge</div>
-      <div style="color:gray">Normal Edge</div>
-    </div>
+  <!-- Adjacency Matrix -->
+  <h3>Adjacency Matrix</h3>
+  <div id="matrix"></div>
 
-    <div id="explain"></div>
-  </div>
-  <canvas id="canvas"></canvas>
-</div>
+  <!-- Distance Table -->
+  <h3>Distance Table</h3>
+  <table id="distTable">
+    <thead>
+      <tr><th>Step</th><th>Chosen Node</th><th>Distances (d[])</th><th>Parents (π[])</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 
-<script>
-const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d');
-canvas.width=window.innerWidth-260; canvas.height=window.innerHeight;
+  <!-- Explanation -->
+  <h3>Step Explanation</h3>
+  <div id="explainBox">Build a graph and click "Step".</div>
 
-let nodes={},edges={},kruskalGen=null,playInt=null;
+  <!-- Controls -->
+  <button onclick="resetDijkstra()">Reset</button>
+  <button onclick="runStep()">Step</button>
 
-function addNode(id,x,y){nodes[id]=[x,y];edges[id]=edges[id]||[];}
-function addEdge(a,b,w){edges[a].push({v:b,w});edges[b].push({v:a,w});}
-function updateSelectors(){
-  const s=document.getElementById('start'), e=document.getElementById('end');
-  s.innerHTML=''; e.innerHTML='';
-  Object.keys(nodes).forEach(k=>{
-    s.add(new Option(k,k)); e.add(new Option(k,k));
-  });
-}
-function draw(high={node:{},edge:{}}){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  for(const u in edges){
-    for(const ed of edges[u]){
-      const v=ed.v; if(u>v) continue;
-      const [x1,y1]=nodes[u],[x2,y2]=nodes[v];
-      ctx.strokeStyle=high.edge[`${u}-${v}`]||"#555";
-      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-      ctx.fillStyle="yellow"; ctx.fillText(ed.w,(x1+x2)/2,(y1+y2)/2);
+  <script>
+    let V = 0, E = 0;
+    let adjMatrix = [];
+    let dist = [], parent = [], visited = [];
+    let pq = [];
+    let step = 0;
+
+    // Generate edge input fields
+    function makeEdgeInputs() {
+      V = parseInt(document.getElementById("numVertices").value);
+      E = parseInt(document.getElementById("numEdges").value);
+      let html = "<h4>Enter Edges (u v w)</h4>";
+      for (let i = 0; i < E; i++) {
+        html += "Edge " + (i+1) + 
+          ": <input size='1' id='u"+i+"' placeholder='u'>" +
+          "<input size='1' id='v"+i+"' placeholder='v'>" +
+          "<input size='2' id='w"+i+"' placeholder='w'><br>";
+      }
+      document.getElementById("edgeInputs").innerHTML = html;
     }
-  }
-  for(const id in nodes){
-    const [x,y]=nodes[id];
-    ctx.fillStyle=high.node[id]||"cyan";
-    ctx.beginPath(); ctx.arc(x,y,18,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle="black"; ctx.fillText(id,x,y);
-  }
-}
-function log(t){const box=document.getElementById('explain');box.innerHTML+=t+"<br>";box.scrollTop=box.scrollHeight;}
 
-// ---- Dijkstra path enumeration ----
-function enumPaths(s,e,vis={},path=[],res=[]){
-  vis[s]=true; path.push(s);
-  if(s===e){
-    let w=0; for(let i=0;i<path.length-1;i++){let a=path[i],b=path[i+1];w+=edges[a].find(x=>x.v===b).w;}
-    res.push({nodes:[...path],weight:w});
-  }else{for(const ed of edges[s])if(!vis[ed.v])enumPaths(ed.v,e,vis,path,res);}
-  path.pop(); vis[s]=false; return res;
-}
-function pick(paths){paths.sort((a,b)=>b.weight-a.weight);return{long:paths[0],mid:paths[Math.floor(paths.length/2)],short:paths[paths.length-1]};}
-async function animate(p){if(p.long){drawPath(p.long.nodes,"red");await sleep(1000);}if(p.mid){drawPath(p.mid.nodes,"orange");await sleep(1000);}if(p.short){drawPath(p.short.nodes,"lime");}}
-function drawPath(path,col){let h={node:{},edge:{}};path.forEach((n,i)=>{h.node[n]=col;if(i<path.length-1){let a=path[i],b=path[i+1];h.edge[`${a}-${b}`]=col;h.edge[`${b}-${a}`]=col;}});draw(h);}
-function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+    // Build adjacency matrix
+    function buildGraph() {
+      adjMatrix = Array.from({length:V},()=>Array(V).fill("∞"));
+      for (let i=0; i<V; i++) adjMatrix[i][i]=0;
+      for (let i=0; i<E; i++) {
+        let u = document.getElementById("u"+i).value.toUpperCase().charCodeAt(0)-65;
+        let v = document.getElementById("v"+i).value.toUpperCase().charCodeAt(0)-65;
+        let w = parseInt(document.getElementById("w"+i).value);
+        adjMatrix[u][v]=w;
+        adjMatrix[v][u]=w; // undirected
+      }
+      updateMatrix();
+      resetDijkstra();
+    }
 
-// ---- Kruskal ----
-function* kruskal(){
-  const all=[];for(const u in edges){for(const ed of edges[u])if(u<ed.v)all.push({u,v:ed.v,w:ed.w});}
-  all.sort((a,b)=>a.w-b.w);
-  const parent={},rank={};for(const n in nodes){parent[n]=n;rank[n]=0;}
-  const find=x=>parent[x]==x?x:parent[x]=find(parent[x]);
-  const unite=(a,b)=>{a=find(a);b=find(b);if(a==b)return false;if(rank[a]<rank[b])[a,b]=[b,a];parent[b]=a;if(rank[a]==rank[b])rank[a]++;return true;}
-  for(const ed of all){yield{t:"consider",ed};if(unite(ed.u,ed.v))yield{t:"accept",ed};else yield{t:"reject",ed};}
-}
-function stepKruskal(){const n=kruskalGen.next();if(n.done){log("MST complete");kruskalGen=null;return;}const v=n.value;if(v.t=="accept"){log("Accepted "+v.ed.u+"-"+v.ed.v);draw({edge:{[`${v.ed.u}-${v.ed.v}`]:"lime"}});}else if(v.t=="reject"){log("Rejected "+v.ed.u+"-"+v.ed.v);draw({edge:{[`${v.ed.u}-${v.ed.v}`]:"red"}});}else{log("Considering "+v.ed.u+"-"+v.ed.v);draw({edge:{[`${v.ed.u}-${v.ed.v}`]:"orange"}});}}
+    // Show adjacency matrix
+    function updateMatrix() {
+      let html="<table><tr><th></th>";
+      for (let i=0; i<V; i++) html+="<th>"+String.fromCharCode(65+i)+"</th>";
+      html+="</tr>";
+      for (let i=0; i<V; i++) {
+        html+="<tr><th>"+String.fromCharCode(65+i)+"</th>";
+        for (let j=0; j<V; j++) html+="<td>"+adjMatrix[i][j]+"</td>";
+        html+="</tr>";
+      }
+      html+="</table>";
+      document.getElementById("matrix").innerHTML=html;
+    }
 
-// ---- Setup ----
-async function setup(){
-  log("Running "+document.getElementById('algo').value);
-  if(document.getElementById('algo').value=="dijkstra"){
-    const s=document.getElementById('start').value,e=document.getElementById('end').value;
-    const paths=enumPaths(s,e);if(!paths.length){log("No path");return;}
-    const picks=pick(paths);await animate(picks);
-  }else{kruskalGen=kruskal();log("Kruskal ready");}
-}
+    // Reset Dijkstra
+    function resetDijkstra() {
+      dist=Array(V).fill(Infinity);
+      parent=Array(V).fill("-");
+      visited=Array(V).fill(false);
+      dist[0]=0; // source = A
+      pq=[0];
+      step=0;
+      document.querySelector("#distTable tbody").innerHTML="";
+      document.getElementById("explainBox").innerHTML="Graph ready. Press Step.";
+    }
 
-// ---- Presets ----
-function loadPreset(p){nodes={};edges={};const cx=canvas.width/2,cy=canvas.height/2;
-  if(p=="triangle"){addNode("A",cx-60,cy+40);addNode("B",cx,cy-60);addNode("C",cx+60,cy+40);addEdge("A","B",4);addEdge("B","C",2);addEdge("A","C",3);}
-  if(p=="square"){["A","B","C","D"].forEach((n,i)=>addNode(n,cx+Math.cos(i*Math.PI/2)*100,cy+Math.sin(i*Math.PI/2)*100));addEdge("A","B",2);addEdge("B","C",3);addEdge("C","D",4);addEdge("D","A",1);}
-  if(p=="chain"){["A","B","C","D"].forEach((n,i)=>addNode(n,cx-150+100*i,cy));addEdge("A","B",5);addEdge("B","C",2);addEdge("C","D",6);}
-  if(p=="star"){addNode("A",cx,cy);["B","C","D","E","F"].forEach((n,i)=>{addNode(n,cx+Math.cos(i*1.2)*120,cy+Math.sin(i*1.2)*120);addEdge("A",n,i+1);});}
-  if(p=="complete"){["A","B","C","D"].forEach((n,i)=>addNode(n,cx+Math.cos(i*1.57)*120,cy+Math.sin(i*1.57)*120));let arr=Object.keys(nodes);for(let i=0;i<arr.length;i++)for(let j=i+1;j<arr.length;j++)addEdge(arr[i],arr[j],Math.floor(Math.random()*9)+1);}
-  if(p=="hexagon"){for(let i=0;i<6;i++){let n=String.fromCharCode(65+i);addNode(n,cx+Math.cos(i*Math.PI/3)*120,cy+Math.sin(i*Math.PI/3)*120);}let arr=Object.keys(nodes);for(let i=0;i<6;i++)addEdge(arr[i],arr[(i+1)%6],Math.floor(Math.random()*9)+1);}
-  if(p=="random"){let N=5+Math.floor(Math.random()*3),ids=[];for(let i=0;i<N;i++){let n=String.fromCharCode(65+i);addNode(n,cx+Math.cos(i*2*Math.PI/N)*150,cy+Math.sin(i*2*Math.PI/N)*120);ids.push(n);}for(let i=0;i<N;i++)for(let j=i+1;j<N;j++)if(Math.random()<0.4)addEdge(ids[i],ids[j],Math.floor(Math.random()*9)+1);}
-  updateSelectors();draw();
-}
+    // One step of Dijkstra
+    function runStep() {
+      if (pq.length==0) { 
+        document.getElementById("explainBox").innerHTML="Done!";
+        return;
+      }
+      // Pick node with smallest distance
+      let u = pq.reduce((a,b)=>dist[a]<dist[b]?a:b);
+      pq = pq.filter(x=>x!=u);
+      if (visited[u]) return runStep();
+      visited[u]=true;
 
-// ---- Events ----
-document.getElementById('loadBtn').onclick=()=>{loadPreset(document.getElementById('preset').value);};
-document.getElementById('setupBtn').onclick=setup;
-document.getElementById('stepBtn').onclick=()=>{if(kruskalGen)stepKruskal();};
-document.getElementById('playBtn').onclick=()=>{if(playInt){clearInterval(playInt);playInt=null;this.textContent="Play";}else{playInt=setInterval(()=>{if(kruskalGen)stepKruskal();},1000);}};
+      let exp = "Step "+(++step)+": Choosing node "+String.fromCharCode(65+u)+" with dist="+dist[u]+"<br>";
 
-// start with triangle
-loadPreset("triangle");
-</script>
+      for (let v=0; v<V; v++) {
+        if (adjMatrix[u][v]!="∞" && !visited[v]) {
+          let candidate = dist[u]+parseInt(adjMatrix[u][v]);
+          if (candidate < dist[v]) {
+            exp += "Updating "+String.fromCharCode(65+v)+": candidate="+candidate+" < current="+dist[v]+" → update parent="+String.fromCharCode(65+u)+"<br>";
+            dist[v]=candidate;
+            parent[v]=String.fromCharCode(65+u);
+            pq.push(v);
+          } else {
+            exp += "Rejecting "+String.fromCharCode(65+v)+": candidate="+candidate+" ≥ current="+dist[v]+"<br>";
+          }
+        }
+      }
+
+      let row="<tr><td>"+step+"</td><td>"+String.fromCharCode(65+u)+"</td><td>"+dist.map(d=>d==Infinity?"∞":d).join(", ")+"</td><td>"+parent.join(", ")+"</td></tr>";
+      document.querySelector("#distTable tbody").innerHTML+=row;
+
+      document.getElementById("explainBox").innerHTML=exp;
+    }
+  </script>
 </body>
 </html>
+
 
 
 
