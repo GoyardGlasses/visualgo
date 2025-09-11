@@ -2,51 +2,33 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Dijkstra Visualizer — Final Fixed</title>
+  <title>Dijkstra Visualizer — Input Table</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
-    input, textarea { font-size: 14px; margin: 4px; padding: 4px; }
-    textarea { width: 420px; height: 120px; display: block; margin-top: 6px; }
+    input { font-size: 14px; padding: 3px; margin: 2px; }
     table, th, td { border: 1px solid #333; border-collapse: collapse; padding: 6px; }
     #explainBox { border: 1px solid #888; padding: 10px; margin-top: 10px; min-height: 90px; background:#f8f8f8; white-space: pre-line; }
     canvas { border: 1px solid #444; margin-top: 10px; display: block; }
     .controls { margin-top: 10px; }
     button { margin: 4px; padding: 6px 12px; }
-    .input-row { margin: 8px 0; }
-    label { margin-right: 6px; }
   </style>
 </head>
 <body>
-  <h2>Dijkstra Visualizer (Final)</h2>
+  <h2>Dijkstra Visualizer</h2>
 
   <!-- Inputs -->
-  <div class="input-row">
-    <label for="numVertices">Number of vertices (N):</label>
+  <div>
+    <label>Number of vertices (N): </label>
     <input id="numVertices" type="number" min="2" value="4" />
   </div>
-
-  <div class="input-row">
-    <label for="numEdges">Number of edges (optional):</label>
-    <input id="numEdges" type="number" min="1" placeholder="leave blank to auto-detect" />
+  <div>
+    <label>Number of edges: </label>
+    <input id="numEdges" type="number" min="1" value="5" />
+    <button onclick="makeEdgeInputs()">Generate Edge Inputs</button>
   </div>
 
-  <div class="input-row">
-    <label for="edgeText">Edges (format: A B 4):</label>
-    <textarea id="edgeText" placeholder="Example:
-A B 4
-A C 2
-C B 1
-B D 3
-C D 4"></textarea>
-  </div>
-
-  <!-- Controls -->
-  <div class="controls">
-    <button id="buildBtn">Build Graph</button>
-    <button id="resetBtn">Reset</button>
-    <button id="stepBtn">Step</button>
-    <button id="playBtn">Play</button>
-  </div>
+  <div id="edgeInputs"></div>
+  <button id="buildBtn">Build Graph</button>
 
   <!-- Matrix -->
   <h3>Adjacency Matrix</h3>
@@ -63,108 +45,116 @@ C D 4"></textarea>
 
   <!-- Explanation -->
   <h3>Step Explanation & Final Paths</h3>
-  <div id="explainBox">Build graph to start. Use lines like: A B 4</div>
+  <div id="explainBox">Enter graph → Build → Step.</div>
 
   <!-- Graph -->
   <h3>Graph Visualization</h3>
   <canvas id="canvas" width="640" height="420"></canvas>
 
+  <!-- Controls -->
+  <div class="controls">
+    <button id="resetBtn">Reset</button>
+    <button id="stepBtn">Step</button>
+    <button id="playBtn">Play</button>
+  </div>
+
 <script>
-/* --- SAME JAVASCRIPT LOGIC AS BEFORE --- */
 (() => {
-  let V = 0, adj = [], dist = [], parent = [], visited = [], edges = [];
-  let stepCount = 0, playing = false, playInterval = null;
+  let V=0, adj=[], dist=[], parent=[], visited=[], edges=[];
+  let stepCount=0, playing=false, playInterval=null;
 
-  const buildBtn = document.getElementById("buildBtn");
-  const resetBtn = document.getElementById("resetBtn");
-  const stepBtn = document.getElementById("stepBtn");
-  const playBtn = document.getElementById("playBtn");
-  const matrixDiv = document.getElementById("matrix");
-  const explainBox = document.getElementById("explainBox");
-  const distTableBody = document.querySelector("#distTable tbody");
-  const canvas = document.getElementById("canvas");
-  const ctx = canvas.getContext("2d");
+  const buildBtn=document.getElementById("buildBtn"),
+        resetBtn=document.getElementById("resetBtn"),
+        stepBtn=document.getElementById("stepBtn"),
+        playBtn=document.getElementById("playBtn"),
+        matrixDiv=document.getElementById("matrix"),
+        explainBox=document.getElementById("explainBox"),
+        distTableBody=document.querySelector("#distTable tbody"),
+        canvas=document.getElementById("canvas"),
+        ctx=canvas.getContext("2d");
 
-  const letterToIndex = s => s.trim().toUpperCase().charCodeAt(0)-65;
-  const indexToLetter = i => String.fromCharCode(65+i);
+  const indexToLetter=i=>String.fromCharCode(65+i);
 
-  function parseEdges() {
-    const raw = document.getElementById("edgeText").value;
-    return raw.split("\n").map(l=>l.trim()).filter(Boolean).map((line,i)=>{
-      const parts = line.split(/\s+/);
-      if (parts.length<3) throw new Error(`Line ${i+1} invalid: ${line}`);
-      const u = letterToIndex(parts[0]), v = letterToIndex(parts[1]), w = Number(parts[2]);
-      if (isNaN(u)||isNaN(v)||!isFinite(w)) throw new Error(`Line ${i+1} invalid: ${line}`);
-      return {u,v,w};
-    });
+  function makeEdgeInputs(){
+    const E=parseInt(document.getElementById("numEdges").value);
+    let html="<h4>Enter Edges (u v w)</h4><p>(Use A,B,C... for vertices)</p><table>";
+    for(let i=0;i<E;i++){
+      html+=`<tr><td>Edge ${i+1}:</td>
+        <td><input size="1" id="u${i}" placeholder="u"></td>
+        <td><input size="1" id="v${i}" placeholder="v"></td>
+        <td><input size="2" id="w${i}" placeholder="w"></td></tr>`;
+    }
+    html+="</table>";
+    document.getElementById("edgeInputs").innerHTML=html;
   }
 
-  function buildAdjMatrix(n, edsIn) {
-    const INF="∞", mat=Array.from({length:n},()=>Array(n).fill(INF)), eds=[];
-    for(let i=0;i<n;i++) mat[i][i]=0;
-    for(const e of edsIn){
-      mat[e.u][e.v]=mat[e.v][e.u]=e.w;
-      const a=Math.min(e.u,e.v), b=Math.max(e.u,e.v);
-      if(!eds.find(x=>x.u==a&&x.v==b)) eds.push({u:a,v:b,w:e.w,color:"black"});
-    }
-    return {mat,eds};
+  function buildGraph(){
+    try{
+      V=parseInt(document.getElementById("numVertices").value);
+      const E=parseInt(document.getElementById("numEdges").value);
+      adj=Array.from({length:V},()=>Array(V).fill("∞"));
+      for(let i=0;i<V;i++)adj[i][i]=0;
+      edges=[];
+      for(let i=0;i<E;i++){
+        const uStr=document.getElementById("u"+i).value.trim().toUpperCase(),
+              vStr=document.getElementById("v"+i).value.trim().toUpperCase(),
+              w=parseInt(document.getElementById("w"+i).value.trim());
+        if(!uStr||!vStr||isNaN(w)) throw Error("Fill all edge boxes");
+        const u=uStr.charCodeAt(0)-65, v=vStr.charCodeAt(0)-65;
+        if(u<0||u>=V||v<0||v>=V) throw Error("Vertex out of range");
+        adj[u][v]=adj[v][u]=w;
+        edges.push({u,v,w,color:"black"});
+      }
+      renderMatrix();
+      resetAlgo();
+    }catch(e){alert("Error: "+e.message);}
   }
 
   function renderMatrix(){
     let html="<table><tr><th></th>";
-    for(let j=0;j<V;j++) html+=`<th>${indexToLetter(j)}</th>`;
+    for(let j=0;j<V;j++)html+=`<th>${indexToLetter(j)}</th>`;
     html+="</tr>";
-    for(let i=0;i<V;i++){
-      html+=`<tr><th>${indexToLetter(i)}</th>`;
-      for(let j=0;j<V;j++) html+=`<td>${adj[i][j]}</td>`;
-      html+="</tr>";
-    }
+    for(let i=0;i<V;i++){html+=`<tr><th>${indexToLetter(i)}</th>`;
+      for(let j=0;j<V;j++)html+=`<td>${adj[i][j]}</td>`;html+="</tr>";}
     matrixDiv.innerHTML=html;
   }
 
   function resetAlgo(){
-    dist=Array(V).fill(Infinity); parent=Array(V).fill(null); visited=Array(V).fill(false);
-    if(V>0) dist[0]=0;
-    stepCount=0; distTableBody.innerHTML=""; explainBox.textContent="Ready. Press Step.";
-    edges.forEach(e=>e.color="black"); drawGraph();
+    dist=Array(V).fill(Infinity);parent=Array(V).fill(null);visited=Array(V).fill(false);
+    if(V>0)dist[0]=0;
+    stepCount=0;distTableBody.innerHTML="";explainBox.textContent="Ready. Step to start.";
+    edges.forEach(e=>e.color="black");drawGraph();
   }
 
   function drawGraph(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    if(!V) return;
+    if(!V)return;
     const cx=canvas.width/2,cy=canvas.height/2,R=Math.min(cx,cy)-80,pos=[];
     for(let i=0;i<V;i++){let a=-Math.PI/2+2*Math.PI*i/V;pos.push({x:cx+R*Math.cos(a),y:cy+R*Math.sin(a)});}
     ctx.textBaseline="middle";ctx.textAlign="center";ctx.font="14px Arial";
-    edges.forEach(e=>{
-      let u=pos[e.u],v=pos[e.v];ctx.beginPath();ctx.strokeStyle=e.color;ctx.lineWidth=2;
+    edges.forEach(e=>{let u=pos[e.u],v=pos[e.v];ctx.beginPath();ctx.strokeStyle=e.color;ctx.lineWidth=2;
       ctx.moveTo(u.x,u.y);ctx.lineTo(v.x,v.y);ctx.stroke();
-      ctx.fillStyle="#000";ctx.fillText(e.w,(u.x+v.x)/2,(u.y+v.y)/2-6);
-    });
+      ctx.fillStyle="#000";ctx.fillText(e.w,(u.x+v.x)/2,(u.y+v.y)/2-6);});
     for(let i=0;i<V;i++){let p=pos[i];ctx.beginPath();ctx.arc(p.x,p.y,22,0,2*Math.PI);
       ctx.fillStyle="#cfe8ff";ctx.fill();ctx.strokeStyle="#333";ctx.stroke();
       ctx.fillStyle="#000";ctx.fillText(indexToLetter(i),p.x,p.y);
       ctx.fillText(dist[i]===Infinity?"∞":dist[i],p.x,p.y+30);}
   }
 
-  function colorEdge(u,v,c){let a=Math.min(u,v),b=Math.max(u,v);edges.forEach(e=>{if(e.u==a&&e.v==b)e.color=c;});}
+  function colorEdge(u,v,c){edges.forEach(e=>{if((e.u===u&&e.v===v)||(e.u===v&&e.v===u))e.color=c;});}
   function pickNext(){let m=Infinity,idx=-1;for(let i=0;i<V;i++)if(!visited[i]&&dist[i]<m){m=dist[i];idx=i;}return idx;}
   function appendRow(c){let d=dist.map(x=>x===Infinity?"∞":x).join(", "),p=parent.map(x=>x==null?"-":indexToLetter(x)).join(", ");distTableBody.innerHTML+=`<tr><td>${stepCount}</td><td>${c==null?"-":indexToLetter(c)}</td><td>${d}</td><td>${p}</td></tr>`;}
-  function runStep(){
-    if(!V){alert("Build a graph first");return;}
-    let u=pickNext();if(u==-1){explainBox.textContent="✅ Finished";highlightTree();showPaths();return;}
+  function runStep(){if(!V){alert("Build graph first");return;}let u=pickNext();if(u==-1){explainBox.textContent="✅ Finished";highlightTree();showPaths();return;}
     visited[u]=true;stepCount++;let exp=`Step ${stepCount}: Pick ${indexToLetter(u)} (dist=${dist[u]}).\n\n`;
-    for(let v=0;v<V;v++)if(adj[u][v]!=="∞"&&!visited[v]){
-      let cand=dist[u]+Number(adj[u][v]),cur=dist[v];
+    for(let v=0;v<V;v++)if(adj[u][v]!=="∞"&&!visited[v]){let cand=dist[u]+Number(adj[u][v]),cur=dist[v];
       if(cand<cur){exp+=`✔ ${indexToLetter(u)}→${indexToLetter(v)} improves dist ${cur}→${cand}\n`;dist[v]=cand;parent[v]=u;colorEdge(u,v,"green");}
       else if(cand===cur){exp+=`⚖ ${indexToLetter(u)}→${indexToLetter(v)} equal dist ${cand}\n`;colorEdge(u,v,"orange");}
-      else{exp+=`✘ ${indexToLetter(u)}→${indexToLetter(v)} worse (${cand}>${cur})\n`;colorEdge(u,v,"red");}
-    }
-    appendRow(u);explainBox.textContent=exp;drawGraph();
-  }
+      else{exp+=`✘ ${indexToLetter(u)}→${indexToLetter(v)} worse (${cand}>${cur})\n`;colorEdge(u,v,"red");}}
+    appendRow(u);explainBox.textContent=exp;drawGraph();}
   function highlightTree(){for(let v=1;v<V;v++)if(parent[v]!=null)colorEdge(parent[v],v,"green");drawGraph();}
   function showPaths(){let out="\nFinal paths from A:\n";for(let v=1;v<V;v++){if(dist[v]===Infinity)out+=`No path to ${indexToLetter(v)}\n`;else{let path=[],cur=v;while(cur!=null){path.push(indexToLetter(cur));if(cur==0)break;cur=parent[cur];}path.reverse();out+=`Path to ${indexToLetter(v)}: ${path.join("→")} (Cost=${dist[v]})\n`;}}explainBox.textContent+=out;}
 
-  buildBtn.onclick=()=>{try{V=+numVertices.value;if(V<2)throw Error("N>=2");let parsed=parseEdges();let numE=numEdges.value.trim();if(numE&&parsed.length!=+numE)throw Error(`Expected ${numE} edges but got ${parsed.length}`);let r=buildAdjMatrix(V,parsed);adj=r.mat;edges=r.eds;renderMatrix();resetAlgo();}catch(e){alert("Error: "+e.message);}};
+  buildBtn.onclick=buildGraph;
   resetBtn.onclick=()=>{if(playing){clearInterval(playInterval);playing=false;playBtn.textContent="Play";}if(V)resetAlgo();};
   stepBtn.onclick=()=>{if(playing){clearInterval(playInterval);playing=false;playBtn.textContent="Play";}runStep();};
   playBtn.onclick=()=>{if(!V){alert("Build graph first");return;}if(!playing){playing=true;playBtn.textContent="Pause";playInterval=setInterval(()=>{if(pickNext()==-1){clearInterval(playInterval);playing=false;playBtn.textContent="Play";runStep();return;}runStep();},900);}else{clearInterval(playInterval);playing=false;playBtn.textContent="Play";}};
@@ -173,6 +163,7 @@ C D 4"></textarea>
 </script>
 </body>
 </html>
+
 
 
 
