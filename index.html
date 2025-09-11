@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Dijkstra Visualizer (Graph + Table + Matrix)</title>
+  <title>Dijkstra Visualizer (Complete)</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
     table, th, td { border: 1px solid black; border-collapse: collapse; padding: 6px; }
-    #explainBox { border: 1px solid black; padding: 10px; margin-top: 10px; min-height: 60px; background: #f9f9f9; }
+    #explainBox { border: 1px solid black; padding: 10px; margin-top: 10px; min-height: 80px; background: #f9f9f9; }
     canvas { border: 1px solid black; margin-top: 10px; }
   </style>
 </head>
@@ -39,7 +39,7 @@
   </table>
 
   <!-- Explanation -->
-  <h3>Step Explanation</h3>
+  <h3>Step Explanation & Final Paths</h3>
   <div id="explainBox">Build a graph and click "Step".</div>
 
   <!-- Graph Visualization -->
@@ -123,8 +123,12 @@
     // Run one step
     function runStep() {
       if (pq.length==0) { 
-        document.getElementById("explainBox").innerHTML="✅ Algorithm finished. Green edges show the shortest path tree.";
+        document.getElementById("explainBox").innerHTML=
+          "✅ Algorithm finished.<br>" +
+          "All shortest paths from source A are now finalized. " +
+          "Green edges in the graph show the shortest path tree.";
         highlightFinalTree();
+        showFinalPaths();
         return;
       }
       let u = pq.reduce((a,b)=>dist[a]<dist[b]?a:b);
@@ -132,28 +136,40 @@
       if (visited[u]) return runStep();
       visited[u]=true;
 
-      let exp = "Step "+(++step)+": Choosing node "+String.fromCharCode(65+u)+" with dist="+dist[u]+"<br>";
+      let exp = "<b>Step "+(++step)+":</b> We now pick <b>node "+
+                String.fromCharCode(65+u)+"</b> " +
+                "because it currently has the smallest known distance ("+dist[u]+").<br><br>";
 
       for (let v=0; v<V; v++) {
         if (adjMatrix[u][v]!="∞" && !visited[v]) {
           let candidate = dist[u]+parseInt(adjMatrix[u][v]);
           if (candidate < dist[v]) {
-            exp += "✔ Updating "+String.fromCharCode(65+v)+": candidate="+candidate+" < current="+dist[v]+" → parent="+String.fromCharCode(65+u)+"<br>";
+            exp += "✔ Looking at edge <b>"+String.fromCharCode(65+u)+" → "+String.fromCharCode(65+v)+"</b> (weight "+adjMatrix[u][v]+").<br>" +
+                   "New possible distance = "+dist[u]+" + "+adjMatrix[u][v]+" = "+candidate+".<br>" +
+                   "This is smaller than current distance to "+String.fromCharCode(65+v)+" ("+dist[v]+").<br>" +
+                   "👉 Update distance of "+String.fromCharCode(65+v)+" to "+candidate+
+                   " and set parent = "+String.fromCharCode(65+u)+".<br><br>";
             dist[v]=candidate;
             parent[v]=String.fromCharCode(65+u);
             pq.push(v);
             colorEdge(u,v,"green");
           } else if (candidate === dist[v]) {
-            exp += "⚖ Tie on "+String.fromCharCode(65+v)+": candidate="+candidate+" == current="+dist[v]+" (keep existing parent)<br>";
+            exp += "⚖ Edge <b>"+String.fromCharCode(65+u)+" → "+String.fromCharCode(65+v)+"</b> (weight "+adjMatrix[u][v]+").<br>" +
+                   "New possible distance = "+candidate+
+                   ", equal to current distance for "+String.fromCharCode(65+v)+".<br>" +
+                   "👉 Both paths are equally good. Keeping the current parent for stability.<br><br>";
             colorEdge(u,v,"orange");
           } else {
-            exp += "✘ Rejecting "+String.fromCharCode(65+v)+": candidate="+candidate+" ≥ current="+dist[v]+"<br>";
+            exp += "✘ Edge <b>"+String.fromCharCode(65+u)+" → "+String.fromCharCode(65+v)+"</b> (weight "+adjMatrix[u][v]+").<br>" +
+                   "New possible distance = "+candidate+
+                   ", greater than current distance ("+dist[v]+").<br>" +
+                   "👉 Reject this path, keep existing shorter path.<br><br>";
             colorEdge(u,v,"red");
           }
         }
       }
 
-      let row="<tr><td>"+step+"</td><td>"+String.fromCharCode(65+u)+"</td><td>"+dist.map(d=>d==Infinity?"∞":d).join(", ")+"</td><td>"+parent.join(", ")+"</td></tr>";
+      let row="<tr><td>"+step+"</td><td>"+String.fromCharCode(65+u)+"</td><td>"+dist.map(d=>d==Infinity?\"∞\":d).join(\", \")+"</td><td>"+parent.join(\", \")+"</td></tr>";
       document.querySelector("#distTable tbody").innerHTML+=row;
 
       document.getElementById("explainBox").innerHTML=exp;
@@ -176,6 +192,29 @@
         }
       }
       drawGraph();
+    }
+
+    // Reconstruct final shortest paths
+    function showFinalPaths() {
+      let output = "<br><b>Final Shortest Paths from Source A:</b><br><br>";
+      for (let v = 1; v < V; v++) {
+        if (dist[v] === Infinity) {
+          output += "No path to " + String.fromCharCode(65+v) + "<br>";
+        } else {
+          let path = [];
+          let current = v;
+          while (current !== 0 && parent[current] !== "-") {
+            path.push(String.fromCharCode(65+current));
+            current = parent[current].charCodeAt(0) - 65;
+          }
+          path.push("A");
+          path.reverse();
+          output += "Path to " + String.fromCharCode(65+v) + ": " +
+                    path.join(" → ") + 
+                    " (Cost = " + dist[v] + ")<br>";
+        }
+      }
+      document.getElementById("explainBox").innerHTML += output;
     }
 
     // Draw graph
@@ -212,6 +251,7 @@
   </script>
 </body>
 </html>
+
 
 
 
