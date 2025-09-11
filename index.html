@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Dijkstra Visualizer (Wordy Steps + Graph + Table)</title>
+<title>Dijkstra Visualizer (Graph + Story Steps)</title>
 <style>
 body { font-family: Arial, sans-serif; margin: 20px; }
 table, th, td { border: 1px solid black; border-collapse: collapse; padding: 6px; }
@@ -19,10 +19,8 @@ button { margin-top: 10px; padding:5px 10px; }
 <h3>Graph Input</h3>
 <label>Number of Vertices:</label>
 <input type="number" id="numVertices" min="2" value="4"><br><br>
-
 <label>Number of Edges:</label>
 <input type="number" id="numEdges" min="1" value="5"><br><br>
-
 <button onclick="makeEdgeInputs()">Generate Edge Inputs</button>
 <div id="edgeInputs"></div>
 <button onclick="buildGraph()">Build Graph</button>
@@ -122,25 +120,24 @@ function runStep(){
   visited[u]=true;
 
   let explain=`<strong>Step ${++step}:</strong> We now focus on node <strong>${String.fromCharCode(65+u)}</strong>, which currently has the smallest known distance of <strong>${dist[u]}</strong> from our starting point.<br>`;
-  explain+=`Think of this as saying: "We know the shortest way to reach ${String.fromCharCode(65+u)} from the start." This node is now settled.<br>`;
+  explain+=`Think of this as: "We have confirmed the shortest way to reach ${String.fromCharCode(65+u)}." This node is now settled.<br>`;
 
   for(let v=0;v<V;v++){
     if(adjMatrix[u][v]!="∞" && !visited[v]){
       let candidate=dist[u]+parseInt(adjMatrix[u][v]);
       if(candidate<dist[v]){
-        explain+=`✔ Neighbor <strong>${String.fromCharCode(65+v)}</strong>: path through ${String.fromCharCode(65+u)} gives distance ${candidate}, which is shorter than previous ${dist[v]==Infinity?"∞":dist[v]}. Update distance and mark this edge as part of the shortest path.<br>`;
+        explain+=`✔ Neighbor <strong>${String.fromCharCode(65+v)}</strong>: path through ${String.fromCharCode(65+u)} gives distance ${candidate}, shorter than previous ${dist[v]==Infinity?"∞":dist[v]}. Update distance & mark edge green.<br>`;
         dist[v]=candidate; parent[v]=String.fromCharCode(65+u); pq.push(v); colorEdge(u,v,"green");
       } else if(candidate==dist[v]){
-        explain+=`⚖ Neighbor <strong>${String.fromCharCode(65+v)}</strong>: path through ${String.fromCharCode(65+u)} gives same distance (${candidate}) as current. We keep previous parent. Edge marked orange.<br>`;
+        explain+=`⚖ Neighbor <strong>${String.fromCharCode(65+v)}</strong>: path through ${String.fromCharCode(65+u)} gives same distance (${candidate}). Keep existing parent. Edge marked orange.<br>`;
         colorEdge(u,v,"orange");
       } else {
-        explain+=`✘ Neighbor <strong>${String.fromCharCode(65+v)}</strong>: path through ${String.fromCharCode(65+u)} gives distance ${candidate}, which is longer than current ${dist[v]}. Reject this path and mark edge red.<br>`;
+        explain+=`✘ Neighbor <strong>${String.fromCharCode(65+v)}</strong>: path through ${String.fromCharCode(65+u)} gives distance ${candidate}, longer than current ${dist[v]}. Reject path. Edge red.<br>`;
         colorEdge(u,v,"red");
       }
     }
   }
 
-  // Update table
   let row="<tr><td>"+step+"</td><td>"+String.fromCharCode(65+u)+"</td><td>"+dist.map(d=>d==Infinity?"∞":d).join(", ")+"</td><td>"+parent.join(", ")+"</td></tr>";
   document.querySelector("#distTable tbody").innerHTML+=row;
 
@@ -169,21 +166,42 @@ function drawGraph(){
   let R=150, cx=300, cy=200, positions=[];
   for(let i=0;i<V;i++){
     let angle=2*Math.PI*i/V;
-    positions.push({x:cx+R*Math.cos(angle),y:cy+R*Math.sin(angle)});
+    positions.push({x: cx + R*Math.cos(angle), y: cy + R*Math.sin(angle)});
   }
+
+  // draw edges first
   edges.forEach(e=>{
     let u=positions[e.u], v=positions[e.v];
-    ctx.beginPath(); ctx.strokeStyle=e.color; ctx.moveTo(u.x,u.y); ctx.lineTo(v.x,v.y); ctx.stroke();
-    ctx.fillStyle="black"; ctx.fillText(e.w,(u.x+v.x)/2,(u.y+v.y)/2);
+    ctx.beginPath();
+    ctx.moveTo(u.x,u.y);
+    ctx.lineTo(v.x,v.y);
+    ctx.strokeStyle=e.color;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.fillStyle="black";
+    ctx.font="14px Arial";
+    ctx.fillText(e.w,(u.x+v.x)/2,(u.y+v.y)/2-5);
   });
+
+  // draw nodes on top
   for(let i=0;i<V;i++){
-    ctx.beginPath(); ctx.arc(positions[i].x,positions[i].y,20,0,2*Math.PI); ctx.fillStyle="lightblue"; ctx.fill(); ctx.stroke();
-    ctx.fillStyle="black"; ctx.fillText(String.fromCharCode(65+i),positions[i].x-5,positions[i].y+5);
+    let pos=positions[i];
+    ctx.beginPath();
+    ctx.arc(pos.x,pos.y,20,0,2*Math.PI);
+    ctx.fillStyle="lightblue";
+    ctx.fill();
+    ctx.strokeStyle="black";
+    ctx.lineWidth=2;
+    ctx.stroke();
+    ctx.fillStyle="black";
+    ctx.font="16px Arial";
+    ctx.fillText(String.fromCharCode(65+i),pos.x-5,pos.y+5);
   }
 }
 </script>
 </body>
 </html>
+
 
 
 
