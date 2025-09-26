@@ -1,206 +1,857 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Dijkstra Visualizer (Graph + Story Steps)</title>
-<style>
-body { font-family: Arial, sans-serif; margin: 20px; }
-table, th, td { border: 1px solid black; border-collapse: collapse; padding: 6px; }
-#explainBox { border: 1px solid black; padding: 10px; margin-top: 10px; min-height: 80px; background: #f9f9f9; }
-canvas { border: 1px solid black; margin-top: 10px; }
-button { margin-top: 10px; padding:5px 10px; }
-</style>
+  <meta charset="utf-8" />
+  <title>KMRL — Final Full Simulation (merged, scatter, ETA)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root{
+      --bg:#071226; --card:#071a2a; --accent:#00b4ff;
+      --good:#2dd4bf; --warn:#f59e0b; --danger:#ef4444; --muted:#94a3b8;
+    }
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg),#021026);font-family:Inter,Segoe UI,Arial,sans-serif;color:#e6eef8}
+    .wrap{max-width:1280px;margin:20px auto;padding:18px}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+    h1{font-size:18px;margin:0}
+    .controls{display:flex;gap:8px;align-items:center}
+    button{background:var(--card);border:1px solid rgba(255,255,255,0.04);padding:8px 12px;border-radius:8px;color:#e6eef8;cursor:pointer}
+    button.primary{background:linear-gradient(90deg,var(--accent),#6ee7b7);color:#042024;font-weight:700}
+
+    .layout{display:grid;grid-template-columns:1fr 380px;gap:16px}
+    .card{background:var(--card);border-radius:12px;padding:12px;border:1px solid rgba(255,255,255,0.03);box-shadow:0 8px 40px rgba(0,0,0,0.6)}
+
+    .station-stage{height:820px;position:relative;overflow:hidden;border-radius:10px;background:linear-gradient(180deg,#052033 0%, #02121a 100%);border:1px solid rgba(255,255,255,0.02)}
+
+    /* train area container (full width) */
+    .train-area{position:absolute;left:0;right:0;top:4px;height:84px;pointer-events:none;overflow:visible}
+
+    .train-el{position:absolute;top:8px;left:-120%;display:flex;gap:10px;z-index:40;will-change:left;align-items:center}
+    .train-el .coach{width:150px;height:64px;border-radius:8px;background:linear-gradient(180deg,#0284c7,#0369a1);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
+    .train-el.extra .coach{background:linear-gradient(180deg,#0ea5a2,#047857)}
+
+    /* platform (below train) */
+    .platform{position:absolute;left:48px;right:48px;top:120px;height:96px;border-radius:10px;display:flex;align-items:flex-end;justify-content:space-between;padding:12px;box-sizing:border-box;border:1px solid rgba(255,255,255,0.03)}
+    .platform.safe{background:linear-gradient(90deg, rgba(45,212,191,0.06), rgba(45,212,191,0.02))}
+    .platform.warn{background:linear-gradient(90deg, rgba(245,158,11,0.06), rgba(245,158,11,0.02))}
+    .platform.danger{background:linear-gradient(90deg, rgba(239,68,68,0.06), rgba(239,68,68,0.02))}
+
+    /* scanner rows (thin) */
+    .scanner-row{position:absolute;left:48px;right:48px;display:flex;justify-content:space-between;align-items:center;pointer-events:none}
+    .scanner{flex:0 0 calc((100% - 9 * 8px) / 10); height:22px;background:#0ea5a2;border-radius:6px;box-shadow:0 6px 18px rgba(16,185,129,0.06);margin:0 5px}
+
+    /* escalator between rows (thin & wide) */
+    .escalator-wide{position:absolute;left:48px;right:48px;height:54px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:inset 0 0 20px rgba(0,0,0,0.35);transition:background 220ms ease}
+    .escalator-wide.slow{background:linear-gradient(90deg,#f59e0b,#b45309)}
+    .escalator-wide .tread{width:92%;height:6px;background:#64748b;margin:5px 0;border-radius:4px}
+
+    .divider-line{position:absolute;left:48px;right:48px;height:2px;background:rgba(255,255,255,0.03)}
+
+    /* passenger dots */
+    .pass{width:12px;height:12px;border-radius:50%;position:absolute;transform:translate(-50%,-50%);background:#34d399;box-shadow:0 4px 14px rgba(2,6,23,0.6);transition:background 160ms ease}
+    .pass.slowed{background:#facc15 !important; box-shadow:0 4px 8px rgba(0,0,0,0.4);}
+
+    /* small UI card for ETAs (matches screenshot) */
+    .eta-card{background:rgba(2,8,15,0.4);padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.03);width:260px}
+    .eta-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0}
+    .eta-label{font-weight:700;font-size:15px}
+    .eta-badge{background:#04232a;padding:6px 10px;border-radius:8px;font-weight:800}
+
+    /* Buffer banner (flashing red) */
+    .buffer-banner{
+      position:absolute; left:50%; transform:translateX(-50%);
+      top:235px; padding:6px 12px; border-radius:8px;
+      background:linear-gradient(90deg,#7f1d1d,#b91c1c); color:#fff; font-weight:800;
+      display:none; z-index:50; box-shadow:0 8px 30px rgba(0,0,0,0.6);
+      animation: flash 1s linear infinite;
+    }
+    @keyframes flash { 0%{opacity:1} 50%{opacity:0.25} 100%{opacity:1} }
+
+    /* controls/sidebar */
+    .panel{display:flex;flex-direction:column;gap:12px}
+    .stat{display:flex;justify-content:space-between;align-items:center;padding:10px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.02)}
+    .meter{height:10px;background:#06101a;border-radius:12px;overflow:hidden}
+    .meter > i{display:block;height:100%;background:linear-gradient(90deg,var(--good),#10b981);width:30%}
+    .small{font-size:12px;color:var(--muted)}
+    .ticket-box{padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);text-align:center;font-weight:700}
+
+    .dispatch-notice{position:fixed;right:28px;top:120px;background:#071720;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);color:#e6eef8;box-shadow:0 8px 30px rgba(0,0,0,0.6);font-weight:700;display:none;z-index:60}
+    .dispatch-notice.show{display:block;opacity:1;transform:translateY(0)}
+
+    footer{margin-top:12px;text-align:center;color:var(--muted);font-size:12px}
+    @media(max-width:980px){.layout{grid-template-columns:1fr} .station-stage{height:820px}}
+  </style>
 </head>
 <body>
+  <div class="wrap">
+    <header>
+      <h1>KMRL — Final Full Simulation (scatter + ETA)</h1>
+      <div class="controls">
+        <button id="btnStart" class="primary">Play Simulation</button>
+        <button id="btnPause">Pause</button>
+        <button id="btnCrowd">Increase Crowd</button>
+        <button id="btnDeploy">Deploy Extra Rake</button>
+        <button id="btnToggleGT">Toggle Game Theory</button>
+      </div>
+    </header>
 
-<h2>Dijkstra’s Algorithm Visualizer</h2>
+    <div class="layout">
+      <div class="card">
+        <div class="station-stage" id="stage">
+          <div style="position:absolute;left:20px;top:12px;opacity:0.85;font-weight:700;z-index:10">Station: Demo (Final)</div>
 
-<!-- Input Section -->
-<h3>Graph Input</h3>
-<label>Number of Vertices:</label>
-<input type="number" id="numVertices" min="2" value="4"><br><br>
-<label>Number of Edges:</label>
-<input type="number" id="numEdges" min="1" value="5"><br><br>
-<button onclick="makeEdgeInputs()">Generate Edge Inputs</button>
-<div id="edgeInputs"></div>
-<button onclick="buildGraph()">Build Graph</button>
+          <!-- TRAIN AREA -->
+          <div class="train-area" id="trainArea">
+            <div id="mainTrain" class="train-el" aria-hidden="true">
+              <div class="coach">C1</div>
+              <div class="coach">C2</div>
+              <div class="coach">C3</div>
+            </div>
+          </div>
 
-<!-- Adjacency Matrix -->
-<h3>Adjacency Matrix</h3>
-<div id="matrix"></div>
+          <!-- PLATFORM -->
+          <div class="platform safe" id="platform">
+            <div style="width:18%"></div><div style="width:18%"></div><div style="width:18%"></div><div style="width:18%"></div><div style="width:18%"></div>
+          </div>
 
-<!-- Distance Table -->
-<h3>Distance Table</h3>
-<table id="distTable">
-  <thead>
-    <tr><th>Step</th><th>Chosen Node</th><th>Distances (d[])</th><th>Parents (π[])</th></tr>
-  </thead>
-  <tbody></tbody>
-</table>
+          <!-- scanner row 2 -->
+          <div id="scannerRow2" class="scanner-row" style="top:210px"></div>
 
-<!-- Explanation -->
-<h3>Step Explanation</h3>
-<div id="explainBox">Build a graph and click "Step".</div>
+          <!-- escalator -->
+          <div id="escalatorBand" class="escalator-wide" style="top:262px">
+            <div class="tread"></div><div class="tread"></div>
+          </div>
 
-<!-- Graph Visualization -->
-<h3>Graph Visualization</h3>
-<canvas id="canvas" width="600" height="400"></canvas>
+          <!-- buffer banner -->
+          <div id="bufferBanner" class="buffer-banner">BUFFER ZONE ACTIVE — Escalator slowed</div>
 
-<!-- Controls -->
-<button onclick="resetDijkstra()">Reset</button>
-<button onclick="runStep()">Step</button>
+          <div class="divider-line" style="top:308px"></div>
+          <!-- scanner row 1 -->
+          <div id="scannerRow1" class="scanner-row" style="top:346px"></div>
+
+          <!-- gates -->
+          <div style="position:absolute;left:12px;top:380px;display:flex;flex-direction:column;gap:8px;align-items:flex-start;z-index:3">
+            <div style="width:18px;height:44px;background:#06b6d4;border-radius:4px"></div>
+            <div style="width:18px;height:44px;background:#06b6d4;border-radius:4px"></div>
+            <div style="width:18px;height:44px;background:#06b6d4;border-radius:4px"></div>
+          </div>
+
+          <!-- passenger pool -->
+          <div id="passengerPool" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none"></div>
+
+          <!-- extra train container -->
+          <div id="extraTrainContainer" style="position:absolute;left:-1200px;top:8px;z-index:39"></div>
+
+          <!-- dispatch notice -->
+          <div id="dispatchNotice" class="dispatch-notice">Extra rake dispatched — arriving in <span id="eta">-</span>s</div>
+        </div>
+      </div>
+
+      <aside class="panel">
+        <div class="card stat">
+          <div>
+            <div style="font-weight:700">Platform occupancy</div>
+            <div class="small">live estimate</div>
+          </div>
+          <div style="width:140px;text-align:right">
+            <div id="occText" style="font-weight:800">0 / 275</div>
+          </div>
+        </div>
+
+        <div class="card stat">
+          <div style="width:100%">
+            <div style="display:flex;justify-content:space-between"><div class="small">Density meter</div><div id="densityPercent" class="small">0%</div></div>
+            <div class="meter" style="margin-top:8px"><i id="meterFill"></i></div>
+          </div>
+        </div>
+
+        <div class="card stat">
+          <div>
+            <div style="font-weight:700">Rakes available</div>
+            <div class="small" id="rakeCount">Idle: 6</div>
+          </div>
+          <div style="text-align:right"><button id="quickDispatch">Quick Dispatch</button></div>
+        </div>
+
+        <div class="card stat">
+          <div>
+            <div style="font-weight:700">Buffer Zone</div>
+            <div class="small">Escalator slowdown at high crowd / ticket queue</div>
+          </div>
+          <div style="text-align:right"><div id="throttleState" class="small">Normal</div></div>
+        </div>
+
+        <!-- ETA card (matches screenshot UI) -->
+        <div class="card" style="padding:12px">
+          <div class="eta-card">
+            <div class="eta-row"><div class="eta-label">Next train in</div><div class="eta-badge" id="nextTrainETA">-s</div></div>
+            <div class="eta-row" style="margin-top:6px"><div class="eta-label">Emergency rake ETA</div><div class="eta-badge" id="emergencyETA">-s</div></div>
+          </div>
+        </div>
+
+        <div class="card" style="padding:10px">
+          <div style="font-weight:700;margin-bottom:6px">Game Theory: passenger nudge</div>
+          <div class="small">When ON, passengers choose least crowded door.</div>
+          <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+            <button id="simulateGT">Simulate Redistribution</button>
+            <div class="ticket-box">2nd-layer queue<br><span id="ticketCount" style="font-weight:800;color:var(--accent)">0</span></div>
+          </div>
+        </div>
+
+      </aside>
+    </div>
+
+    <footer style="text-align:center;margin-top:10px;color:var(--muted)">Place <code>anime.min.js</code> in <code>js/</code> to use local anime, otherwise CDN fallback will load automatically</footer>
+  </div>
 
 <script>
-let V=0,E=0;
-let adjMatrix=[], dist=[], parent=[], visited=[], pq=[], step=0, edges=[];
-let canvas=document.getElementById("canvas"), ctx=canvas.getContext("2d");
+/* ===================================================
+   FULL merged simulation (one-file)
+   - scatter fixed
+   - boarding cap 200
+   - frequency 10s normally, 5s when occupancy > 300
+   - emergency rake automatic with ETA and arrival animation
+   - Next Train in + Emergency rake ETA UI
+   =================================================== */
 
-// Generate edge input fields
-function makeEdgeInputs(){
-  V=parseInt(document.getElementById("numVertices").value);
-  E=parseInt(document.getElementById("numEdges").value);
-  let html="<h4>Enter Edges (u v w)</h4><p>Use A,B,C... for vertices</p>";
-  for(let i=0;i<E;i++){
-    html+="Edge "+(i+1)+": <input size='1' id='u"+i+"' placeholder='u'>"+
-          "<input size='1' id='v"+i+"' placeholder='v'>"+
-          "<input size='2' id='w"+i+"' placeholder='w'><br>";
-  }
-  document.getElementById("edgeInputs").innerHTML=html;
-}
+/* ========== CONFIG & STATE ========== */
+const PLATFORM_CAPACITY = 275;   // platform capacity shown in UI
+const BOARDING_CAP = 200;        // boarding cap per train stop (user requested "200 always")
+let currentOccupancy = 20;
+let idleRakes = 6;
+let simulationPlaying = false;
+let gameTheoryOn = false;
+let tokenBucketRate = 10;
 
-// Build adjacency matrix
-function buildGraph(){
-  adjMatrix=Array.from({length:V},()=>Array(V).fill("∞"));
-  edges=[];
-  for(let i=0;i<V;i++) adjMatrix[i][i]=0;
-  for(let i=0;i<E;i++){
-    let u=document.getElementById("u"+i).value.toUpperCase().charCodeAt(0)-65;
-    let v=document.getElementById("v"+i).value.toUpperCase().charCodeAt(0)-65;
-    let w=parseInt(document.getElementById("w"+i).value);
-    adjMatrix[u][v]=w; adjMatrix[v][u]=w;
-    edges.push({u,v,w,color:"black"});
-  }
-  updateMatrix(); resetDijkstra(); drawGraph();
-}
+let ticketQueueCount = 0;
+let escalatorSlowActive = false;
+const escalatorDurationNormal = 900;
+const escalatorDurationSlow = 3000;
 
-// Show adjacency matrix
-function updateMatrix(){
-  let html="<table><tr><th></th>";
-  for(let i=0;i<V;i++) html+="<th>"+String.fromCharCode(65+i)+"</th>";
-  html+="</tr>";
-  for(let i=0;i<V;i++){
-    html+="<tr><th>"+String.fromCharCode(65+i)+"</th>";
-    for(let j=0;j<V;j++) html+="<td>"+adjMatrix[i][j]+"</td>";
-    html+="</tr>";
-  }
-  html+="</table>";
-  document.getElementById("matrix").innerHTML=html;
-}
+let extraRakeScheduled = false;
+let extraRakeActive = false;
+let trainInTransit = false;
+let lastTrainDeparture = 0;
 
-// Reset Dijkstra
-function resetDijkstra(){
-  dist=Array(V).fill(Infinity);
-  parent=Array(V).fill("-");
-  visited=Array(V).fill(false);
-  dist[0]=0; pq=[0]; step=0;
-  document.querySelector("#distTable tbody").innerHTML="";
-  document.getElementById("explainBox").innerHTML="Graph ready. Press Step to see how the algorithm finds the shortest paths.";
-  edges.forEach(e=>e.color="black");
-  drawGraph();
-}
+// train intervals
+const INTERVAL_LOW = 10000; // 10s normal
+const INTERVAL_HIGH = 5000; // 5s when overcrowded (> 300)
+const EXTRA_RAKE_MIN_DELAY = 4000; // extra rake ETA lower bound
+const EXTRA_RAKE_MAX_DELAY = 5000; // extra rake ETA upper bound
 
-// Run one step
-function runStep(){
-  if(pq.length==0){
-    document.getElementById("explainBox").innerHTML="✅ Algorithm finished! Green edges show the final shortest path tree.";
-    highlightFinalTree(); drawGraph(); return;
-  }
-  let u=pq.reduce((a,b)=>dist[a]<dist[b]?a:b); pq=pq.filter(x=>x!=u);
-  if(visited[u]) return runStep();
-  visited[u]=true;
+const MAX_PASSENGERS_ON_DOM = 900; // safety cap to avoid crash
 
-  let explain=`<strong>Step ${++step}:</strong> We now focus on node <strong>${String.fromCharCode(65+u)}</strong>, which currently has the smallest known distance of <strong>${dist[u]}</strong> from our starting point.<br>`;
-  explain+=`Think of this as: "We have confirmed the shortest way to reach ${String.fromCharCode(65+u)}." This node is now settled.<br>`;
+/* ========== DOM refs ========== */
+const stage = document.getElementById('stage');
+const passengerPool = document.getElementById('passengerPool');
+const platform = document.getElementById('platform');
+const occText = document.getElementById('occText');
+const meterFill = document.getElementById('meterFill');
+const densityPercent = document.getElementById('densityPercent');
+const rakeCount = document.getElementById('rakeCount');
+const throttleState = document.getElementById('throttleState');
+const scannerRow1 = document.getElementById('scannerRow1');
+const scannerRow2 = document.getElementById('scannerRow2');
+const escalatorBand = document.getElementById('escalatorBand');
+const ticketCountSpan = document.getElementById('ticketCount');
+const mainTrain = document.getElementById('mainTrain');
+const extraTrainContainer = document.getElementById('extraTrainContainer');
+const dispatchNotice = document.getElementById('dispatchNotice');
+const etaSpan = document.getElementById('eta');
+const bufferBanner = document.getElementById('bufferBanner');
+const nextTrainETAEl = document.getElementById('nextTrainETA');
+const emergencyETAEl = document.getElementById('emergencyETA');
 
-  for(let v=0;v<V;v++){
-    if(adjMatrix[u][v]!="∞" && !visited[v]){
-      let candidate=dist[u]+parseInt(adjMatrix[u][v]);
-      if(candidate<dist[v]){
-        explain+=`✔ Neighbor <strong>${String.fromCharCode(65+v)}</strong>: path through ${String.fromCharCode(65+u)} gives distance ${candidate}, shorter than previous ${dist[v]==Infinity?"∞":dist[v]}. Update distance & mark edge green.<br>`;
-        dist[v]=candidate; parent[v]=String.fromCharCode(65+u); pq.push(v); colorEdge(u,v,"green");
-      } else if(candidate==dist[v]){
-        explain+=`⚖ Neighbor <strong>${String.fromCharCode(65+v)}</strong>: path through ${String.fromCharCode(65+u)} gives same distance (${candidate}). Keep existing parent. Edge marked orange.<br>`;
-        colorEdge(u,v,"orange");
-      } else {
-        explain+=`✘ Neighbor <strong>${String.fromCharCode(65+v)}</strong>: path through ${String.fromCharCode(65+u)} gives distance ${candidate}, longer than current ${dist[v]}. Reject path. Edge red.<br>`;
-        colorEdge(u,v,"red");
-      }
+/* ========== anime.js loader (local -> CDN -> stub) ========== */
+function ensureAnimeReady(){
+  return new Promise((resolve)=>{
+    if(window.anime) return resolve(window.anime);
+    const local = 'js/anime.min.js';
+    function load(src, cb){
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = ()=>cb(null);
+      s.onerror = ()=>cb(new Error('failed'));
+      document.head.appendChild(s);
     }
-  }
-
-  let row="<tr><td>"+step+"</td><td>"+String.fromCharCode(65+u)+"</td><td>"+dist.map(d=>d==Infinity?"∞":d).join(", ")+"</td><td>"+parent.join(", ")+"</td></tr>";
-  document.querySelector("#distTable tbody").innerHTML+=row;
-
-  document.getElementById("explainBox").innerHTML=explain;
-  drawGraph();
-}
-
-// Color an edge
-function colorEdge(u,v,color){
-  edges.forEach(e=>{if((e.u===u && e.v===v)||(e.u===v && e.v===u)) e.color=color;});
-}
-
-// Highlight final shortest path tree
-function highlightFinalTree(){
-  for(let v=1;v<V;v++){
-    if(parent[v]!=="-"){
-      let u=parent[v].charCodeAt(0)-65; colorEdge(u,v,"green");
-    }
-  }
-  drawGraph();
-}
-
-// Draw graph
-function drawGraph(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  let R=150, cx=300, cy=200, positions=[];
-  for(let i=0;i<V;i++){
-    let angle=2*Math.PI*i/V;
-    positions.push({x: cx + R*Math.cos(angle), y: cy + R*Math.sin(angle)});
-  }
-
-  // draw edges first
-  edges.forEach(e=>{
-    let u=positions[e.u], v=positions[e.v];
-    ctx.beginPath();
-    ctx.moveTo(u.x,u.y);
-    ctx.lineTo(v.x,v.y);
-    ctx.strokeStyle=e.color;
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    ctx.fillStyle="black";
-    ctx.font="14px Arial";
-    ctx.fillText(e.w,(u.x+v.x)/2,(u.y+v.y)/2-5);
+    load(local, (errLocal)=>{
+      if(!errLocal && window.anime) return resolve(window.anime);
+      const cdn = 'https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js';
+      load(cdn, (errCdn)=>{
+        if(!errCdn && window.anime) return resolve(window.anime);
+        console.warn('anime not available — using minimal stub (instant actions)');
+        window.anime = function(opts){
+          if(opts && typeof opts.complete === 'function') setTimeout(opts.complete, 16);
+          return { play:()=>{}, pause:()=>{}, finished: Promise.resolve() };
+        };
+        window.anime.timeline = function(){ return { add: ()=>{}, play:()=>{}, pause:()=>{}, finished: Promise.resolve() }; };
+        window.anime.remove = function(){};
+        resolve(window.anime);
+      });
+    });
   });
+}
 
-  // draw nodes on top
-  for(let i=0;i<V;i++){
-    let pos=positions[i];
-    ctx.beginPath();
-    ctx.arc(pos.x,pos.y,20,0,2*Math.PI);
-    ctx.fillStyle="lightblue";
-    ctx.fill();
-    ctx.strokeStyle="black";
-    ctx.lineWidth=2;
-    ctx.stroke();
-    ctx.fillStyle="black";
-    ctx.font="16px Arial";
-    ctx.fillText(String.fromCharCode(65+i),pos.x-5,pos.y+5);
+/* ========== UI update ========== */
+function updateUI(){
+  occText.textContent = `${currentOccupancy} / ${PLATFORM_CAPACITY}`;
+  const pct = Math.min(100, Math.round((currentOccupancy / PLATFORM_CAPACITY)*100));
+  densityPercent.textContent = pct + '%';
+  if(meterFill) meterFill.style.width = pct + '%';
+  if(pct < 70) platform.className = 'platform safe';
+  else if(pct < 90) platform.className = 'platform warn';
+  else platform.className = 'platform danger';
+  rakeCount.textContent = `Idle: ${idleRakes}`;
+  throttleState.textContent = escalatorSlowActive ? 'Buffer Active' : 'Normal';
+  ticketCountSpan.textContent = ticketQueueCount;
+  bufferBanner.style.display = escalatorSlowActive ? 'block' : 'none';
+}
+updateUI();
+
+/* ========== build scanners ========== */
+function makeScanners(rowEl){
+  rowEl.innerHTML = '';
+  for(let i=0;i<10;i++){ const s = document.createElement('div'); s.className = 'scanner'; rowEl.appendChild(s); }
+}
+makeScanners(scannerRow1); makeScanners(scannerRow2);
+
+/* ========== escalator treads ========== */
+let escalatorAnim = null;
+function startEscalatorAnim(duration=800){
+  try{
+    if(escalatorAnim && escalatorAnim.pause) escalatorAnim.pause();
+    escalatorAnim = anime({targets: '#escalatorBand .tread', translateY:[-4,4], duration:duration, loop:true, direction:'alternate', easing:'easeInOutSine', autoplay:true});
+  }catch(e){ console.warn('escalatorAnim err', e); }
+}
+startEscalatorAnim(700);
+
+function evaluateEscalatorBuffer(){
+  // buffer turns on at ticketQueue >= 100 or occupancy >= 300
+  const shouldSlow = ticketQueueCount >= 100 || currentOccupancy >= 300;
+  if(shouldSlow !== escalatorSlowActive){
+    escalatorSlowActive = shouldSlow;
+    if(shouldSlow){ escalatorBand.classList.add('slow'); startEscalatorAnim(1400); }
+    else { escalatorBand.classList.remove('slow'); startEscalatorAnim(700); }
+    updateUI();
   }
 }
+
+/* ========== PASSENGER SPAWN & FLOW (scatter fixes) ========== */
+let passengerId = 0;
+function countPassengersOnDOM(){ return passengerPool.children.length; }
+
+/* compute current loads per 5 platform zones */
+function getZoneLoads(){
+  const loads = [0,0,0,0,0];
+  document.querySelectorAll('.pass.waiting').forEach(pp=>{
+    const z = parseInt(pp.dataset.zone);
+    if(!isNaN(z) && z>=0 && z<5) loads[z]++;
+  });
+  return loads;
+}
+function pickLeastLoadedZone(){
+  const loads = getZoneLoads();
+  let min = Math.min(...loads);
+  const idxs = loads.map((v,i)=> v===min ? i : -1).filter(i=>i>=0);
+  return idxs[Math.floor(Math.random()*idxs.length)];
+}
+
+/* spawnPassenger: bigger horizontal spread, small jitter, zone balancing */
+function spawnPassenger(){
+  try{
+    if(countPassengersOnDOM() >= MAX_PASSENGERS_ON_DOM) return;
+
+    const p = document.createElement('div'); p.className = 'pass'; p.dataset.id = passengerId++;
+    p.style.width='12px'; p.style.height='12px';
+
+    const st = stage.getBoundingClientRect();
+    // wider initial spread so they appear scattered
+    const spawnX = st.left + st.width/2 + (Math.random()*720 - 360);
+    const spawnY = st.top + st.height - 18 + (Math.random()*18 - 9);
+    p.style.left = (spawnX - st.left) + 'px';
+    p.style.top = (spawnY - st.top) + 'px';
+    p.style.zIndex = 2 + Math.floor(Math.random()*6);
+    passengerPool.appendChild(p);
+
+    // compute lanes, escalator, platform coords
+    const stageLocal = stage.getBoundingClientRect();
+    const r1 = scannerRow1.getBoundingClientRect();
+    const r2 = scannerRow2.getBoundingClientRect();
+    const esc = escalatorBand.getBoundingClientRect();
+    const plat = platform.getBoundingClientRect();
+
+    const lane = Math.floor(Math.random()*10);
+    const s1Elem = scannerRow1.children[lane] ? scannerRow1.children[lane].getBoundingClientRect() : r1;
+    const s2Elem = scannerRow2.children[lane] ? scannerRow2.children[lane].getBoundingClientRect() : r2;
+
+    const jitterLaneX = (Math.random()*14 - 7);
+    const t1x = (s1Elem.left - stageLocal.left) + (s1Elem.width/2) + jitterLaneX;
+    const t1y = (s1Elem.top - stageLocal.top) + (s1Elem.height/2) + (Math.random()*8 - 4);
+    const escInX = (esc.left - stageLocal.left) + (esc.width * ((lane + 0.5)/10)) + (Math.random()*12 - 6);
+    const escInY = (esc.top - stageLocal.top) + esc.height - 10 + (Math.random()*8 - 4);
+    const escOutX = (esc.left - stageLocal.left) + (esc.width * ((lane + 0.5)/10)) + (Math.random()*12 - 6);
+    const escOutY = (esc.top - stageLocal.top) + 8 + (Math.random()*8 - 4);
+    const t2x = (s2Elem.left - stageLocal.left) + (s2Elem.width/2) + (Math.random()*10 - 5);
+    const t2y = (s2Elem.top - stageLocal.top) + (s2Elem.height/2) + (Math.random()*6 - 3);
+
+    // choose a platform zone by least-loaded
+    const zone = pickLeastLoadedZone();
+    const leftPad = Math.max(plat.left - stageLocal.left + 16, 48);
+    const rightPad = Math.max((plat.right - stageLocal.left) - 16, leftPad + 80);
+    const zoneWidth = (rightPad - leftPad) / 5;
+    const platformX = leftPad + zoneWidth*(zone + 0.5) + (Math.random()*zoneWidth*0.6 - zoneWidth*0.3);
+    const platformY = (plat.top - stageLocal.top) + 40 + Math.random()*28;
+
+    // animation pipeline: scanner1 -> escalator -> scanner2 -> ticket -> platform wait
+    anime({
+      targets: p,
+      left: t1x,
+      top: t1y,
+      duration: 700 + Math.random()*220,
+      easing: 'easeOutQuad',
+      complete: ()=>{
+        anime({targets:p, duration:200 + Math.random()*250, complete: ()=>{
+          anime({targets:p, left: escInX, top: escInY, duration:600 + Math.random()*200, easing:'easeOutQuad', complete: ()=>{
+            // on escalator
+            p.dataset.onEscalator = 'true';
+            if(escalatorSlowActive || currentOccupancy >= 300) p.classList.add('slowed');
+            const dur = (escalatorSlowActive || currentOccupancy >= 300) ? escalatorDurationSlow : escalatorDurationNormal;
+            anime({targets:p, left: escOutX, top: escOutY, duration: dur + Math.random()*300, easing:'linear', complete: ()=>{
+              delete p.dataset.onEscalator;
+              anime({targets:p, left: t2x, top: t2y, duration:650 + Math.random()*200, easing:'easeOutQuad', complete: ()=>{
+                // join ticket queue
+                ticketQueueCount++; updateTicketUI();
+                p.classList.remove('slowed'); p.dataset.atTicket = 'true';
+                anime({targets:p, scale:[1,1.04,1], duration:600 + Math.random()*200, easing:'easeInOutSine'});
+                const baseService = 700 + Math.random()*800;
+                const serviceFactor = 1 + Math.min(2, ticketQueueCount / 120);
+                const serviceTime = baseService * serviceFactor;
+                setTimeout(()=>{
+                  ticketQueueCount = Math.max(0, ticketQueueCount - 1);
+                  updateTicketUI();
+                  delete p.dataset.atTicket;
+                  anime({targets:p, left: platformX, top: platformY, duration:1000 + Math.random()*400, easing:'easeOutQuad', complete: ()=>{
+                    // now waiting on platform (crucial: they do NOT move left until boarding)
+                    currentOccupancy++;
+                    p.classList.add('waiting');
+                    p.dataset.zone = zone;
+                    // small rotation for variation (append transform)
+                    const rot = (Math.random()*10 - 5);
+                    p.style.transform += ` rotate(${rot}deg)`;
+                    updateUI();
+                    evaluateEscalatorBuffer();
+                    checkExtraDispatchCondition();
+                  }});
+                }, serviceTime);
+              }});
+            }});
+          }});
+        }});
+      }
+    });
+
+  }catch(e){
+    console.error('spawnPassenger error', e);
+  }
+}
+
+/* seed helper */
+function seedInitial(count=40){
+  for(let i=0;i<count;i++) setTimeout(()=> spawnPassenger(), i*85 + Math.random()*100);
+}
+
+/* ========== ticket UI ========== */
+function updateTicketUI(){
+  ticketCountSpan.textContent = ticketQueueCount;
+  evaluateEscalatorBuffer();
+}
+
+/* ========== BOARDING (only when train docks) ========== */
+function boardWaitingIntoTrain(trainEl){
+  // IMPORTANT: boarding uses only .pass.waiting (they must reach platform first)
+  const waiting = Array.from(document.querySelectorAll('.pass.waiting'));
+  if(waiting.length === 0 || currentOccupancy <= 0) return 0;
+
+  // 60-70% boarding fraction of current occupancy but never more than BOARDING_CAP
+  const percent = 0.60 + Math.random()*0.10; // 0.6 - 0.7
+  let desired = Math.floor((currentOccupancy) * percent);
+  desired = Math.min(desired, BOARDING_CAP);
+  const canBoard = Math.min(desired, waiting.length);
+
+  for(let i=0;i<canBoard;i++){
+    const p = waiting[i];
+    p.classList.remove('waiting');
+    const trainRect = trainEl.getBoundingClientRect();
+    const stageRectLocal = stage.getBoundingClientRect();
+    const targetX = trainRect.left - stageRectLocal.left + 40 + Math.random()*(trainRect.width - 80 || 100);
+    const targetY = trainRect.top - stageRectLocal.top + 30 + Math.random()*12;
+    anime({targets:p, left: targetX, top: targetY, scale:0.6, duration:900 + Math.random()*200, easing:'easeInOutQuad', complete: ()=>{
+      // boarded -> remove
+      p.remove();
+    }});
+  }
+
+  const boarded = canBoard;
+  currentOccupancy = Math.max(0, currentOccupancy - boarded);
+  updateUI();
+  evaluateEscalatorBuffer();
+  return boarded;
+}
+
+/* ========== TRAIN movement (arrive, dwell, depart) ========== */
+async function runTrainOnce({dwell=2000, approachDuration=1400, departDuration=1400} = {}){
+  await ensureAnimeReady();
+  return new Promise((resolve)=>{
+    try{
+      trainInTransit = true;
+      const trainEl = document.getElementById('mainTrain');
+      // put off-screen left and show
+      trainEl.style.left = '-120%';
+      trainEl.style.top = '8px';
+      trainEl.style.display = 'flex';
+
+      // compute docking px aligning roughly with platform
+      const stageRect = stage.getBoundingClientRect();
+      const platformRect = platform.getBoundingClientRect();
+      const dockingLeftPx = Math.max(48, Math.round((platformRect.left - stageRect.left) + 8));
+
+      // use timeline
+      const tl = anime.timeline({autoplay:true});
+      tl.add({
+        targets: trainEl,
+        left: [`-120%`, `${dockingLeftPx}px`],
+        duration: approachDuration,
+        easing: 'easeInOutQuad',
+        begin: ()=>{ trainEl.querySelectorAll('.coach').forEach(c=>c.classList.add('docking')); }
+      });
+
+      // settle then dwell (boarding)
+      tl.add({ duration: 120 });
+      tl.add({
+        duration: dwell,
+        begin: ()=>{
+          // boarding waves during dwell for natural look
+          const waves = Math.max(1, Math.floor(dwell / 800));
+          for(let i=0;i<waves;i++){
+            setTimeout(()=> boardWaitingIntoTrain(trainEl), 300 + i*550);
+          }
+        }
+      });
+
+      // depart to right
+      tl.add({
+        targets: trainEl,
+        left: ['' + dockingLeftPx + 'px', '120%'],
+        duration: departDuration,
+        easing: 'easeInOutSine',
+        complete: ()=>{
+          trainEl.querySelectorAll('.coach').forEach(c=>c.classList.remove('docking'));
+          trainInTransit = false;
+          lastTrainDeparture = Date.now();
+          setTimeout(()=> resolve(), 80);
+        }
+      });
+
+    }catch(e){
+      console.warn('runTrainOnce error', e);
+      trainInTransit = false;
+      lastTrainDeparture = Date.now();
+      resolve();
+    }
+  });
+}
+
+/* ========== EXTRA RAKE spawn (3-coach) with visible ETA => shows on emergency ETA UI ==========
+   - When scheduled, sets emergencyETA var & countdown UI.
+   - When triggered, spawns a 3-coach train that docks and boards.
+=========================================================================== */
+let emergencyETA = -1;
+let emergencyCountdownTimer = null;
+
+function setEmergencyETA(ms){
+  // ms is milliseconds until arrival. Show on emergencyETAEl and start countdown.
+  if(emergencyCountdownTimer) { clearInterval(emergencyCountdownTimer); emergencyCountdownTimer = null; }
+  if(ms <= 0){
+    emergencyETA = -1;
+    emergencyETAEl.textContent = '-s';
+    return;
+  }
+  emergencyETA = Math.max(0, Math.ceil(ms/1000));
+  emergencyETAEl.textContent = `${emergencyETA}s`;
+  emergencyCountdownTimer = setInterval(()=>{
+    emergencyETA = Math.max(0, emergencyETA - 1);
+    emergencyETAEl.textContent = `${emergencyETA}s`;
+    if(emergencyETA <= 0){ clearInterval(emergencyCountdownTimer); emergencyCountdownTimer=null; emergencyETA = -1; setTimeout(()=> emergencyETAEl.textContent='-s', 200); }
+  }, 1000);
+}
+
+function spawnExtraRake(){
+  if(idleRakes <= 0) return;
+  if(extraRakeActive) return;
+  extraRakeActive = true;
+  idleRakes--; updateUI();
+
+  const container = extraTrainContainer;
+  container.innerHTML = '';
+  const eTrain = document.createElement('div'); eTrain.className = 'train-el extra';
+  eTrain.style.position = 'absolute'; eTrain.style.top = '8px'; eTrain.style.left = '-120%';
+  for(let i=1;i<=3;i++){ const c = document.createElement('div'); c.className='coach'; c.textContent='S'+i; eTrain.appendChild(c); }
+  container.appendChild(eTrain);
+
+  (async ()=>{
+    await ensureAnimeReady();
+    try{
+      // Wait until main train isn't docking (avoid visual overlap). Wait but with timeout cap.
+      let waited = 0;
+      while(trainInTransit && waited < 12000){ await new Promise(r=>setTimeout(r,120)); waited += 120; }
+      trainInTransit = true; // mark to prevent overlap
+
+      const stageRect = stage.getBoundingClientRect();
+      const platformRect = platform.getBoundingClientRect();
+      // docking offset to avoid colliding visuals
+      const dockingLeftPx = Math.max(48, Math.round((platformRect.left - stageRect.left) + 60));
+
+      const tl = anime.timeline({autoplay:true});
+      tl.add({
+        targets: eTrain,
+        left: [`-120%`, `${dockingLeftPx}px`],
+        duration: 1300,
+        easing: 'easeOutExpo',
+        begin: ()=>{ eTrain.querySelectorAll('.coach').forEach(c=>c.classList.add('docking')); }
+      });
+      tl.add({ duration: 160 });
+      // boarding phase
+      tl.add({ duration: 1100, begin: ()=>{ boardWaitingIntoTrain(eTrain); }});
+      tl.add({
+        targets: eTrain,
+        left: '120%',
+        duration: 1400,
+        easing: 'easeInOutSine',
+        complete: ()=>{
+          eTrain.remove();
+          idleRakes++; updateUI();
+          extraRakeActive = false;
+          trainInTransit = false;
+          lastTrainDeparture = Date.now();
+          dispatchNoticeShow(false);
+          // clear emergency ETA UI if it was showing
+          setEmergencyETA(0);
+        }
+      });
+
+    }catch(e){
+      console.warn('spawnExtraRake err', e);
+      container.innerHTML = '';
+      idleRakes++; extraRakeActive = false; trainInTransit = false; dispatchNoticeShow(false); updateUI();
+      setEmergencyETA(0);
+    }
+  })();
+}
+
+/* ========== Dispatch notice (right-hand small toast) ========== */
+let dispatchTimer = null;
+function dispatchNoticeShow(on, etaMs=0){
+  if(on){
+    const seconds = Math.max(1, Math.ceil(etaMs / 1000));
+    etaSpan.textContent = seconds;
+    dispatchNotice.classList.add('show');
+    dispatchNotice.style.display = 'block';
+    if(dispatchTimer) clearInterval(dispatchTimer);
+    let remaining = Math.ceil(etaMs/1000);
+    dispatchTimer = setInterval(()=>{
+      remaining = Math.max(0, remaining - 1);
+      etaSpan.textContent = remaining;
+      if(remaining <= 0){ clearInterval(dispatchTimer); dispatchTimer=null; }
+    }, 1000);
+  } else {
+    dispatchNotice.classList.remove('show');
+    setTimeout(()=>{ dispatchNotice.style.display='none'; etaSpan.textContent='-'; if(dispatchTimer){ clearInterval(dispatchTimer); dispatchTimer=null; } }, 600);
+  }
+}
+
+/* schedule extra after last train if still crowded */
+let extraScheduleTimeout = null;
+function scheduleExtraAfterLastTrain(){
+  if(extraRakeScheduled || extraRakeActive || idleRakes <= 0) return;
+  extraRakeScheduled = true;
+  const delay = EXTRA_RAKE_MIN_DELAY + Math.floor(Math.random() * (EXTRA_RAKE_MAX_DELAY - EXTRA_RAKE_MIN_DELAY + 1));
+  // show both dispatchNotice and emergencyETA UI
+  dispatchNoticeShow(true, delay);
+  setEmergencyETA(delay);
+  extraScheduleTimeout = setTimeout(()=>{
+    extraRakeScheduled = false;
+    dispatchNoticeShow(false);
+    // spawn only if condition still valid
+    if(currentOccupancy >= 300 && !extraRakeActive && idleRakes > 0){
+      spawnExtraRake();
+    } else {
+      // clear ETA display if not spawning
+      setEmergencyETA(0);
+    }
+  }, delay);
+}
+
+/* auto-check dispatch condition (threshold: 300) */
+function checkExtraDispatchCondition(){
+  if(currentOccupancy >= 300 && !extraRakeScheduled && !extraRakeActive && idleRakes > 0){
+    scheduleExtraAfterLastTrain();
+  }
+}
+
+/* ========== NEXT TRAIN ETA UI (countdown until next scheduled main train) ========== */
+let nextTrainETA = -1;
+let nextTrainTimer = null;
+function setNextTrainETA(ms){
+  if(nextTrainTimer){ clearInterval(nextTrainTimer); nextTrainTimer=null; }
+  if(ms <= 0){ nextTrainETA = -1; nextTrainETAEl.textContent='-s'; return; }
+  nextTrainETA = Math.max(0, Math.ceil(ms/1000));
+  nextTrainETAEl.textContent = `${nextTrainETA}s`;
+  nextTrainTimer = setInterval(()=>{
+    nextTrainETA = Math.max(0, nextTrainETA - 1);
+    nextTrainETAEl.textContent = `${nextTrainETA}s`;
+    if(nextTrainETA <= 0){ clearInterval(nextTrainTimer); nextTrainTimer=null; setTimeout(()=> nextTrainETAEl.textContent='-s', 200); }
+  }, 1000);
+}
+
+/* ========== TRAIN loop scheduler: respects occupancy thresholds for delays ==========
+   Loop logic:
+    - run train (arrive/dwell/leave)
+    - after departure choose nextDelay based on occupancy (>=300 -> 5s, else 10s)
+    - update nextTrain ETA UI while waiting
+    - while waiting, tokenBucketCycle continues to spawn passengers
+=========================================================================== */
+let trainSchedulerActive = false;
+let trainLoopAbort = false;
+async function trainLoop(){
+  if(trainSchedulerActive) return;
+  trainSchedulerActive = true;
+  trainLoopAbort = false;
+  while(simulationPlaying && !trainLoopAbort){
+    if(!trainInTransit){
+      // choose timings
+      const approach = 1200 + Math.floor(Math.random()*800);
+      const depart = 1200 + Math.floor(Math.random()*800);
+      // dwell slightly shorter when overcrowded? keep similar
+      const dwell = 1400 + Math.floor(Math.random()*900);
+      // run a train cycle
+      await runTrainOnce({dwell, approachDuration:approach, departDuration:depart});
+    }
+    lastTrainDeparture = Date.now();
+
+    // if heavily crowded schedule emergency rake
+    if(currentOccupancy >= 300 && idleRakes > 0 && !extraRakeScheduled && !extraRakeActive){
+      scheduleExtraAfterLastTrain();
+    }
+
+    // compute next delay depending on current occupancy (>=300 -> 5s else 10s)
+    const nextDelay = (currentOccupancy >= 300) ? INTERVAL_HIGH : INTERVAL_LOW;
+
+    // set nextTrain ETA UI
+    setNextTrainETA(nextDelay);
+
+    // wait responsively for nextDelay
+    let waited = 0;
+    const chunk = 200;
+    while(waited < nextDelay && simulationPlaying && !trainLoopAbort){
+      await new Promise(r=>setTimeout(r, chunk));
+      waited += chunk;
+    }
+  }
+  trainSchedulerActive = false;
+}
+
+/* ========== token-bucket arrivals (admission) ========== */
+let bucket = tokenBucketRate;
+function tokenBucketCycle(){
+  bucket = Math.min(100, bucket + tokenBucketRate);
+  const admit = Math.min(bucket, Math.floor(Math.random()*5 + 3));
+  bucket -= admit;
+  for(let i=0;i<admit;i++){ setTimeout(()=> spawnPassenger(), Math.random()*300); }
+  if(currentOccupancy > PLATFORM_CAPACITY*0.9){ tokenBucketRate = Math.max(2, tokenBucketRate-2); }
+  else if(currentOccupancy > PLATFORM_CAPACITY*0.75){ tokenBucketRate = Math.max(6, tokenBucketRate-1); }
+  else tokenBucketRate = 10;
+  updateUI();
+}
+
+/* ========== Game-theory redistribution ========== */
+function applyGameTheoryRedistribution(){
+  const waiting = Array.from(document.querySelectorAll('.pass.waiting'));
+  const zoneCount = [0,0,0,0,0];
+  waiting.forEach(pp=>{ if(pp.dataset.zone) zoneCount[parseInt(pp.dataset.zone)]++; });
+  waiting.forEach((p,i)=>{
+    let min = Math.min(...zoneCount);
+    let idx = zoneCount.indexOf(min);
+    zoneCount[idx]++;
+    p.dataset.zone = idx;
+    const plat = platform.getBoundingClientRect();
+    const stageLocal = stage.getBoundingClientRect();
+    const leftPad = Math.max(plat.left - stageLocal.left + 16, 48);
+    const rightPad = Math.max((plat.right - stageLocal.left) - 16, leftPad + 80);
+    const zoneWidth = (rightPad - leftPad) / 5;
+    const zoneX = leftPad + (idx + 0.5)*zoneWidth + (Math.random()*zoneWidth*0.3 - zoneWidth*0.15);
+    anime({targets:p, left: zoneX, duration:600, easing:'easeOutQuad'});
+  });
+}
+
+/* ========== controls wiring ========= */
+document.getElementById('btnStart').addEventListener('click', async ()=>{
+  if(simulationPlaying) return;
+  simulationPlaying = true;
+  await ensureAnimeReady();
+  startEscalatorAnim(700);
+  seedInitial(40);
+  if(window.mainInterval) clearInterval(window.mainInterval);
+  // admissions cycle runs every 2.5s
+  window.mainInterval = setInterval(()=>{ tokenBucketCycle(); evaluateEscalatorBuffer(); if(gameTheoryOn && Math.random() < 0.25) applyGameTheoryRedistribution(); }, 2500);
+  trainLoop();
+});
+
+document.getElementById('btnPause').addEventListener('click', ()=>{
+  simulationPlaying = false;
+  trainLoopAbort = true;
+  if(window.mainInterval) clearInterval(window.mainInterval);
+  // clear ETAs
+  setNextTrainETA(0);
+  setEmergencyETA(0);
+});
+
+document.getElementById('btnCrowd').addEventListener('click', ()=>{ for(let i=0;i<80;i++){ setTimeout(()=> spawnPassenger(), i*20); } });
+
+document.getElementById('btnDeploy').addEventListener('click', ()=>{
+  if(!extraRakeActive && idleRakes > 0){
+    // manual dispatch: show dispatch notice and emergency ETA then spawn
+    const manualDelay = 3000;
+    dispatchNoticeShow(true, manualDelay);
+    setEmergencyETA(manualDelay);
+    setTimeout(()=>{ dispatchNoticeShow(false); if(!extraRakeActive && idleRakes>0) spawnExtraRake(); }, manualDelay);
+  }
+});
+
+document.getElementById('btnToggleGT').addEventListener('click', ()=>{
+  gameTheoryOn = !gameTheoryOn;
+  document.getElementById('btnToggleGT').textContent = gameTheoryOn ? 'GameTheory: ON' : 'Toggle Game Theory';
+});
+
+document.getElementById('quickDispatch').addEventListener('click', ()=>{
+  if(!extraRakeActive && idleRakes>0){
+    const d = 3000;
+    dispatchNoticeShow(true, d);
+    setEmergencyETA(d);
+    setTimeout(()=>{ dispatchNoticeShow(false); spawnExtraRake(); }, d);
+  }
+});
+
+document.getElementById('simulateGT').addEventListener('click', ()=> applyGameTheoryRedistribution());
+
+/* ========== INIT seed & UI ========= */
+ensureAnimeReady().then(()=>{ startEscalatorAnim(700); seedInitial(40); updateTicketUI(); updateUI(); }).catch((e)=>{ console.warn('init anime err', e); startEscalatorAnim(700); seedInitial(40); updateTicketUI(); updateUI(); });
+
+/* occupancy watcher for UI sync */
+(function occupancyWatcher(){ let prev=currentOccupancy; setInterval(()=>{ if(prev !== currentOccupancy){ prev=currentOccupancy; updateUI(); evaluateEscalatorBuffer(); } }, 300); })();
+
 </script>
 </body>
 </html>
+
 
 
 
